@@ -576,6 +576,9 @@ toolchain_pkg_setup() {
 		ewarn "See http://gcc.gnu.org/bugzilla/show_bug.cgi?id=29831"
 	fi
 
+	# TPREFIX is the prefix of the CTARGET installation
+	export TPREFIX=${TPREFIX:-${EPREFIX}}
+
 	# we dont want to use the installed compiler's specs to build gcc!
 	unset GCC_SPECS
 
