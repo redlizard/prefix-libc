@@ -6,6 +6,7 @@
 # here until we find out why.
 
 if [[ ${PN} == gcc ]]; then
-	CPPFLAGS="-I@GENTOO_PORTAGE_EPREFIX@/tmp/usr/include"
-	LDFLAGS="-Wl,--dynamic-linker=$(echo '@GENTOO_PORTAGE_EPREFIX@'/lib64/ld-linux-*.so.*)"
+	CPPFLAGS="-I${EPREFIX}/tmp/usr/include"
+	echo $CPPFLAGS
+	LDFLAGS="-Wl,--dynamic-linker=$(echo ${EPREFIX}/lib*/ld-linux*.so.*)"
 fi
