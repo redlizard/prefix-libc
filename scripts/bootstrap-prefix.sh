@@ -92,11 +92,36 @@ efetch() {
 # 	einfo "${A%-*} successfully bootstrapped"
 # }
 
+set_profile() {
+	# switch profiles in used for different phases of stage3
+    
+	# Phase 0: gcc first pass, linked against host libc, with
+	#          rpath to stage1 libraries
+    
+	# Phase 1: bootstrap base system on glibc
+    
+	# Phase 2: final
+	
+	local profile
+	case $1 in
+	0) profile="${PORTDIR_RAP}"/profiles/bootstrap/gcc ;;
+	1) profile="${PORTDIR_RAP}"/profiles/bootstrap/glibc ;;
+	2) profile="${PORTDIR_RAP}"/profiles/$(sed 's,../,,' < "${PORTDIR_RAP}"/profiles/bootstrap/parent) ;;
+	esac
+
+	rm -f ${ROOT}/etc/portage/make.profile
+	ln -s "${profile}" "${ROOT}"/etc/portage/make.profile
+	local file=make.defaults
+	[[ -e "${profile}"/${file}.in ]] && \
+		sed "s,@GENTOO_PORTAGE_EPREFIX@,${ROOT},g" "${profile}"/${file}.in > "${profile}"/${file}
+
+	einfo "Your profile is set to ${profile} at phase $1."
+}
+
 bootstrap_setup() {
 	local profile=""
 	local keywords=""
 	local ldflags_make_defaults=""
-	local cppflags_make_defaults="CPPFLAGS=\"-I${ROOT}/usr/include -I${ROOT}/tmp/usr/include\""
 	local extra_make_globals=""
 	einfo "setting up some guessed defaults"
 	case ${CHOST} in
@@ -145,18 +170,10 @@ HOSTCC='gcc -m64'
 "
 			;;
 		i*86-pc-linux-gnu)
-			profile="${PORTDIR_RAP}/profiles/default/linux/x86/13.0/rap"
-			ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib -L${ROOT}/lib -L${ROOT}/tmp/usr/lib\""
-			extra_make_globals="
-PORTDIR_OVERLAY=\"${PORTDIR_RAP}\"
-"
+			profile="../default/linux/x86/13.0/rap"
 			;;
 		x86_64-pc-linux-gnu)
-			profile="${PORTDIR_RAP}/profiles/default/linux/amd64/13.0/rap"
-			ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib64 -L${ROOT}/lib64 -L${ROOT}/tmp/usr/lib\""
-			extra_make_globals="
-PORTDIR_OVERLAY=\"${PORTDIR_RAP}\"
-"
+			profile="../default/linux/amd64/13.0/rap"
 			;;
 		ia64-pc-linux-gnu)
 			profile="${PORTDIR}/profiles/prefix/linux/ia64"
@@ -171,11 +188,7 @@ PORTDIR_OVERLAY=\"${PORTDIR_RAP}\"
 			ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib -Wl,-rpath=${ROOT}/usr/lib -L${ROOT}/lib -Wl,-rpath=${ROOT}/lib -L${ROOT}/tmp/usr/lib -Wl,-rpath=${ROOT}/tmp/usr/lib\""
 			;;
 		armv7l-pc-linux-gnu)
-			profile="${PORTDIR_RAP}/profiles/default/linux/amd64/13.0/rap"
-			ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib -L${ROOT}/lib -L${ROOT}/tmp/usr/lib\""
-			extra_make_globals="
-PORTDIR_OVERLAY=\"${PORTDIR_RAP}\"
-"
+			profile="../default/linux/amd64/13.0/rap"
 			;;
 		sparc-sun-solaris2.9)
 			profile="${PORTDIR}/profiles/prefix/sunos/solaris/5.9/sparc"
@@ -323,57 +336,14 @@ HOSTCC='gcc -m64'
 			einfo "profile in ${PORTDIR} for your CHOST ${CHOST}"
 			;;
 	esac
-	if [[ -n ${profile} && ! -e ${ROOT}/etc/portage/make.profile ]] ; then
-		ln -s "${profile}" "${ROOT}"/etc/portage/make.profile
-		einfo "Your profile is set to ${profile}."
 
-		# Let's put all the custumizations in /etc/make.conf,
-		# which would be overwritten by /etc/portage/make.conf.
+	echo "${profile}" > "${PORTDIR_RAP}"/profiles/bootstrap/parent
 
-		# make.globals is used for GCC overrides
-		echo "${extra_make_globals}" >> "${ROOT}"/etc/make.conf
-		# we will keep this overlay info after bootstrap
-		echo "${extra_make_globals}" >> "${ROOT}"/etc/make.conf.bak
-		# this is darn ugly, but we can't use the make.globals hack,
-		# since the profiles overwrite CFLAGS/LDFLAGS in numerous cases
-		echo "${cppflags_make_defaults}" >> "${ROOT}"/etc/make.conf
-		echo "${ldflags_make_defaults}" >> "${ROOT}"/etc/make.conf
-		# The default profiles (and IUSE defaults) introduce circular deps. By
-		# shoving this USE line into make.defaults, we can ensure that the
-		# end-user always avoids circular deps while bootstrapping and it gets
-		# wiped after a --sync. Also simplifies bootstrapping instructions.
-		echo "USE=\"-berkdb -fortran -gdbm -git -nls -pcre -ssl -python -readline bootstrap\"" >> "${ROOT}"/etc/make.conf
-		# and we don't need to spam the user about news until after a --sync
-		# because the tools aren't available to read the news item yet anyway.
-		echo 'FEATURES="${FEATURES} -news"' >> "${ROOT}"/etc/make.conf
-		# Disable the STALE warning because the snapshot frequently gets stale.
-		# DON'T REMOVE this one, stage3's tree check relies on this one
-		echo 'PORTAGE_SYNC_STALE=0' >> "${ROOT}"/etc/make.conf
-		# Set correct PYTHONPATH for Portage, since our Python lives in
-		# $EPREFIX/tmp, bug #407573
-		echo "PYTHONPATH=${ROOT}/usr/lib/portage/pym" >> "${ROOT}"/etc/make.conf
-		# Most binary Linux distributions seem to fancy toolchains that
-		# do not do c++ support (need to install a separate package).
-		# Since we don't check for g++, just make sure binutils won't
-		# try to build gold (needs c++), it will get there once we built
-		# our own GCC with c++ support.  For that reason we cannot
-		# globally mask cxx, because then GCC will be built without c++
-		# support too.
-		echo "sys-devel/binutils -cxx" >> "${ROOT}"/etc/portage/package.use
-		echo "dev-libs/gmp -cxx" >> "${ROOT}"/etc/portage/package.use
-
-		# don't inject rpath at all
-		echo ">=sys-devel/binutils-config-3-r03.1" >> "${ROOT}"/etc/portage/package.mask
-
-		einfo "Your portage config files are prepared for your current bootstrap"
-	fi
-	# Hack for bash because curses is not always available (linux).
-	# This will be wiped upon emerge --sync and back to normal.
-
-	[[ -d "${ROOT}"/etc/portage/env ]] || mkdir "${ROOT}"/etc/portage/env
+	# REMOVE the following after migrating to gentoo-x86 base
+	echo "PORTDIR_OVERLAY=\"${PORTDIR_RAP}\"" >> "${ROOT}"/etc/make.conf
 	
-	echo 'EXTRA_ECONF="--without-curses"' > "${ROOT}"/etc/portage/env/no-curses.conf
-	echo 'app-shells/bash no-curses.conf' >> "${ROOT}"/etc/portage/package.env
+	# don't inject rpath at all. 
+	echo ">=sys-devel/binutils-config-3-r03.1" >> "${ROOT}"/etc/portage/package.mask
 }
 
 do_tree() {
@@ -858,6 +828,22 @@ bootstrap_zlib() {
 	bootstrap_zlib_core 1.2.6 || bootstrap_zlib_core 1.2.5
 }
 
+bootstrap_gmp() {
+	bootstrap_gnu gmp 5.0.5
+}
+
+bootstrap_mpfr() {
+    	export CPPFLAGS="-I$EPREFIX/tmp/usr/include"
+	export LDFLAGS="-L$EPREFIX/tmp/usr/lib"
+	bootstrap_gnu mpfr 3.1.2
+}
+
+bootstrap_mpc() {
+	export CPPFLAGS="-I$EPREFIX/tmp/usr/include"
+	export LDFLAGS="-L$EPREFIX/tmp/usr/lib"
+	bootstrap_gnu mpc 1.0.1
+}
+
 bootstrap_sed() {
 	bootstrap_gnu sed 4.2.1
 }
@@ -1014,14 +1000,11 @@ bootstrap_stage1() {
 	type -P bzip2 > /dev/null || (bootstrap_bzip2) || return 1
 	# important to have our own (non-flawed one) since Python (from
 	# Portage) and binutils use it
-	for zlib in ${ROOT}/usr/lib/libz.* ; do
-		[[ -e ${zlib} ]] && break
-		zlib=
-	done
-	[[ -n ${zlib} ]] || (bootstrap_zlib) || return 1
-	
-	[[ $(ld --version 2>&1) == *"(GNU Binutils) "2.23* ]] \
-		|| (bootstrap_binutils) || return 1
+
+	ls ${ROOT}/usr/lib/libz.* >/dev/null 2>&1 || (bootstrap_zlib) || return 1
+	ls ${ROOT}/usr/lib/libgmp.* >/dev/null 2>&1 || (bootstrap_gmp) || return 1
+	ls ${ROOT}/usr/lib/libmpfr.* >/dev/null 2>&1 || (bootstrap_mpfr) || return 1
+	ls ${ROOT}/usr/lib/libmpc.* >/dev/null 2>&1 || (bootstrap_mpc) || return 1
 	
 	# too vital to rely on a host-provided one
 	[[ -x ${ROOT}/usr/bin/python ]] || (bootstrap_python) || return 1
@@ -1108,25 +1091,29 @@ bootstrap_stage3() {
 		done
 	}
 
+	set_profile 0
 	# --oneshot --nodeps
 	local pkgs=(
+		sys-apps/sed
+		"<app-shells/bash-4.2_p20"  # higher versions require readline
+		app-arch/xz-utils
+		sys-apps/baselayout-prefix
+		sys-devel/m4
+		sys-devel/flex
+		sys-devel/bison
+		sys-libs/zlib
 		dev-libs/gmp
 		dev-libs/mpfr
 		dev-libs/mpc
-		sys-libs/zlib
-		# sys-apps/sed
-		# "<app-shells/bash-4.2_p20"  # higher versions require readline
-		# app-arch/xz-utils
 		sys-kernel/linux-headers
-		# >=glibc-2.16 requires at least gcc-4.3 and binutils-2.20
-		sys-apps/baselayout-prefix
-		# sys-devel/m4
-		# sys-devel/flex
-		# sys-devel/bison
 		sys-devel/binutils-config
 		sys-devel/gcc-config
+		sys-devel/binutils
+		$([[ $(gcc --version 2>&1) == *'gcc ('*') 4.'[678]* ]] || echo "sys-devel/gcc")
 	)
+	emerge_pkgs --nodeps "${pkgs[@]}" || return 1
 
+	set_profile 1
 	case ${bootstrapCHOST} in
 		*-darwin*)
 			pkgs=( ${pkgs[@]} sys-apps/darwin-miscutils sys-libs/csu )
@@ -1198,19 +1185,19 @@ bootstrap_stage3() {
 			)
 			;;
 		*)
+			# gcc second pass to link against new gilbc
 			pkgs=(
-				${pkgs[@]}
-				'=sys-libs/glibc-2.10*'
-				sys-devel/gcc
-				sys-devel/binutils
+				sys-libs/glibc
 			)
 			;;
 	esac
 
-	emerge_pkgs --nodeps "${pkgs[@]}" || return 1
+	[[ -f "${ROOT}"/etc/portage/make.profile/.gcc-rap-installed ]] || \
+		( emerge --nodeps --oneshot sys-devel/gcc && \
+			touch "${ROOT}"/etc/portage/make.profile/.gcc-rap-installed ) || \
+		return 1
 
-	echo "great just stop here..."
-	return 0
+	emerge_pkgs --nodeps "${pkgs[@]}" || return 1
 
 	# we need pax-utils this early for OSX (before libiconv - gen_usr_ldscript)
 	# but also for perl, which uses scanelf/scanmacho to find compatible
@@ -1266,25 +1253,12 @@ bootstrap_stage3() {
 		rm -Rf "${ROOT}"/tmp || return 1
 		mkdir -p "${ROOT}"/tmp || return 1
 	fi
-	# note to myself: the tree MUST be synced at least once, or we'll
-	# carry on the polluted profile!
-	treedate=$(date -f "${ROOT}"/usr/portage/metadata/timestamp +%s)
-	nowdate=$(date +%s)
-	[[ $(< ${ROOT}/etc/portage/make.profile/make.defaults) != *"PORTAGE_SYNC_STALE"* && $((nowdate - (60 * 60 * 24))) -lt ${treedate} ]] || emerge --sync || emerge-webrsync || return 1
+
+	set_profile 2
 
 	# activate last compiler (some Solaris cases), needed for mpc and
 	# deps below
 	gcc-config $(gcc-config -l | wc -l)
-
-	local cpuflags=
-	case ${bootstrapCHOST} in
-		*-darwin*)
-			: # gcc-apple is 4.2, so mpfr/mpc/gmp are not necessary
-			;;
-		*)
-			emerge_pkgs "" "<dev-libs/mpc-0.9" || return 1
-			;;
-	esac
 
 	# Portage should figure out itself what it needs to do, if anything
 	USE=-git emerge -u system || return 1
