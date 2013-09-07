@@ -187,8 +187,11 @@ HOSTCC='gcc -m64'
 			profile="${PORTDIR}/profiles/prefix/linux/ppc64"
 			ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib -Wl,-rpath=${ROOT}/usr/lib -L${ROOT}/lib -Wl,-rpath=${ROOT}/lib -L${ROOT}/tmp/usr/lib -Wl,-rpath=${ROOT}/tmp/usr/lib\""
 			;;
-		armv7l-pc-linux-gnu)
-			profile="../default/linux/amd64/13.0/rap"
+		armv7a-hardfloat-linux-gnueabi)
+			profile="../default/linux/arm/13.0/armv7a/rap"
+			;;
+		armv5tel-softfloat-linux-gnueabi)
+			profile="../default/linux/arm/13.0/armv5te/rap"
 			;;
 		sparc-sun-solaris2.9)
 			profile="${PORTDIR}/profiles/prefix/sunos/solaris/5.9/sparc"
