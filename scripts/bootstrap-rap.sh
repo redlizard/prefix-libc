@@ -1228,14 +1228,9 @@ bootstrap_stage3() {
 	# --oneshot
 	local pkgs=(
 		"<net-misc/wget-1.13.4-r1" # until we fix #393277
-		virtual/os-headers
+		dev-util/pkgconf
 	)
 	emerge_pkgs "" "${pkgs[@]}" || return 1
-
-	# ugly hack to make sure we can compile glib without pkg-config,
-	# which is depended upon by shared-mime-info
-	export LIBFFI_CFLAGS="-I$(echo ${ROOT}/usr/lib*/libffi-*/include)"
-	export LIBFFI_LIBS="-lffi"
 
 	# for some yet unknown reason, libxml2 has a problem with zlib, but
 	# only during this stage, in the emerge -e system phase it is fine
@@ -1250,7 +1245,7 @@ bootstrap_stage3() {
 	# disable collision-protect to overwrite the bootstrapped portage
 	FEATURES="-collision-protect" emerge_pkgs "" "sys-apps/portage" || return 1
 
-	unset LIBFFI_CFLAGS LIBFFI_LIBS CPPFLAGS
+	unset CPPFLAGS
 
 	if [[ -d ${ROOT}/tmp/var/tmp ]] ; then
 		rm -Rf "${ROOT}"/tmp || return 1
