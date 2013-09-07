@@ -1399,17 +1399,6 @@ EOF
 			;;
 	esac
 
-	if [[ ${UID} == 0 ]] ; then
-		cat << EOF
-
-Hmmm, you appear to be root, or at least someone with UID 0.  I really
-don't like that.  The Gentoo Prefix people really discourage anyone
-running Gentoo Prefix as root.  As a matter of fact, I'm just refusing
-to help you any further here.
-If you insist, you'll have go without my help, or bribe me.
-EOF
-		exit 1
-	fi
 	echo
 	echo "It seems to me you are '${USER:-$(whoami 2> /dev/null)}' (${UID}), that looks cool to me."
 
@@ -1958,6 +1947,12 @@ if [[ -z ${CHOST} ]]; then
 						;;
 					powerpc*)
 						CHOST="`uname -m`-unknown-linux-gnu"
+						;;
+					armv7l)
+						CHOST=armv7a-hardfloat-linux-gnueabi
+						;;
+					armv5te*)
+						CHOST=armv5tel-softfloat-linux-gnueabi
 						;;
 					*)
 						CHOST="`uname -m`-pc-linux-gnu"
