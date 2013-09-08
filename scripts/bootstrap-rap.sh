@@ -1050,6 +1050,7 @@ bootstrap_stage3() {
 		done
 	}
 
+	set_profile 1
 	# --oneshot --nodeps
 	local pkgs=(
 		sys-apps/sed
@@ -1071,7 +1072,6 @@ bootstrap_stage3() {
 
 	emerge_pkgs --nodeps "${pkgs[@]}" || return 1
 
-	set_profile 1
 	echo 'int main() {}' > test-rpath.c
 	gcc -o test-rpath test-rpath.c
 	if readelf -d test-rpath | grep -q rpath; then
@@ -1158,16 +1158,12 @@ EOF
 			# gcc second pass to link against new gilbc
 			pkgs=(
 				sys-libs/glibc
+				sys-devel/gcc
 			)
 			;;
 	esac
 
 	emerge_pkgs --nodeps "${pkgs[@]}" || return 1
-
-	[[ -f "${ROOT}"/etc/portage/make.profile/.gcc-rap-installed ]] || \
-		( emerge --nodeps --oneshot sys-devel/gcc && \
-			touch "${ROOT}"/etc/portage/make.profile/.gcc-rap-installed ) || \
-		return 1
 
 	# we need pax-utils this early for OSX (before libiconv - gen_usr_ldscript)
 	# but also for perl, which uses scanelf/scanmacho to find compatible
