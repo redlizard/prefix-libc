@@ -94,13 +94,10 @@ efetch() {
 
 set_profile() {
 	# switch profiles in used for different phases of stage3
-	# Phase 0: gcc first pass, linked against host libc, with
-	#          rpath to stage1 libraries
 	# Phase 1: bootstrap base system on glibc
 	# Phase 2: final
 	local profile
 	case $1 in
-	0) profile="${PORTDIR_RAP}"/profiles/bootstrap/gcc ;;
 	1) profile="${PORTDIR_RAP}"/profiles/bootstrap/glibc ;;
 	2) profile="${PORTDIR_RAP}"/profiles/$(sed 's,../,,' < "${PORTDIR_RAP}"/profiles/bootstrap/parent) ;;
 	esac
@@ -511,56 +508,6 @@ prep_gcc-fsf() {
 
 }
 
-bootstrap_gcc() {
-
-	case ${CHOST} in
-		*-*-darwin*)
-			prep_gcc-apple
-			;;
-		*-*-solaris*)
-			prep_gcc-fsf
-			GCC_EXTRA_OPTS="--disable-multilib --with-gnu-ld"
-			;;
-		*)	
-			prep_gcc-fsf
-			;;
-	esac
-
-	GCC_LANG="c,c++"
-
-	export S="${PORTAGE_TMPDIR}/gcc-${GCC_PV}"
-	rm -rf "${S}"
-	mkdir -p "${S}"
-	cd "${S}"
-	einfo "Unpacking ${GCC_A}"
-	$TAR ${TAROPTS} "${DISTDIR}"/${GCC_A} || return 1
-
-	rm -rf "${S}"/build
-	mkdir -p "${S}"/build
-	cd "${S}"/build
-
-	${CONFIG_SHELL} ${S}/gcc-${GCC_PV}/configure \
-		--prefix="${ROOT}"/usr \
-		--mandir="${ROOT}"/usr/share/man \
-		--infodir="${ROOT}"/usr/share/info \
-		--datadir="${ROOT}"/usr/share \
-		--disable-checking \
-		--disable-werror \
-		--disable-nls \
-		--with-system-zlib \
-		--enable-languages=${GCC_LANG} \
-		${GCC_EXTRA_OPTS} \
-		|| return 1
-
-	$MAKE ${MAKEOPTS} bootstrap-lean || return 1
-
-	$MAKE install || return 1
-
-	cd "${ROOT}"
-	rm -Rf "${S}"
-	einfo "${GCC_A%-*} successfully bootstrapped"
-}
-
 bootstrap_gnu() {
 	local PN PV A S
 	PN=$1
@@ -583,6 +530,7 @@ bootstrap_gnu() {
 		fi
 
 		URL=${GNU_URL}/${PN}/${A}
+		[[ ${PN} == gcc ]] && URL=${GNU_URL}/${PN}/${PN}-${PV}/${A}
 		efetch ${URL} || continue
 
 		einfo "Unpacking ${A%-*}"
@@ -637,6 +585,9 @@ bootstrap_gnu() {
 	# there, and if so, the buildsystem assumes the header exists too
 	[[ ${PN} == "coreutils" ]] && \
 		myconf="${myconf} --disable-acl --without-gmp"
+
+	[[ ${PN} == "gcc" ]] && myconf="${myconf} --disable-bootstrap --enable-languages=c\
+		--disable-multilib"
 
 	if [[ ${PN} == "coreutils" && ${CHOST} == *-interix* ]] ; then
 		# Interix doesn't have filesystem listing stuff, but that means all
@@ -832,15 +783,21 @@ bootstrap_gmp() {
 }
 
 bootstrap_mpfr() {
-    	export CPPFLAGS="-I$EPREFIX/tmp/usr/include"
-	export LDFLAGS="-L$EPREFIX/tmp/usr/lib"
+    	export CPPFLAGS="-I${ROOT}/usr/include"
+	export LDFLAGS="-L${ROOT}/usr/lib"
 	bootstrap_gnu mpfr 3.1.2
 }
 
 bootstrap_mpc() {
-	export CPPFLAGS="-I$EPREFIX/tmp/usr/include"
-	export LDFLAGS="-L$EPREFIX/tmp/usr/lib"
+    	export CPPFLAGS="-I${ROOT}/usr/include"
+	export LDFLAGS="-L${ROOT}/usr/lib"
 	bootstrap_gnu mpc 1.0.1
+}
+
+bootstrap_gcc() {
+	export CPPFLAGS="-I${ROOT}/usr/include"
+	export LDFLAGS="-L${ROOT}/usr/lib -Wl,-rpath=${ROOT}/usr/lib"
+	bootstrap_gnu gcc 4.7.3
 }
 
 bootstrap_sed() {
@@ -1008,6 +965,9 @@ bootstrap_stage1() {
 	# too vital to rely on a host-provided one
 	[[ -x ${ROOT}/usr/bin/python ]] || (bootstrap_python) || return 1
 
+	# glibc requies >=gcc-4.6
+	[[ $(gcc --version 2>&1) == *'gcc ('*') 4.'[678]* ]] || (bootstrap_gcc) || return 1
+	
 	einfo "stage1 successfully finished"
 }
 
@@ -1090,7 +1050,6 @@ bootstrap_stage3() {
 		done
 	}
 
-	set_profile 0
 	# --oneshot --nodeps
 	local pkgs=(
 		sys-apps/sed
@@ -1106,13 +1065,6 @@ bootstrap_stage3() {
 		dev-libs/mpc
 		sys-kernel/linux-headers
 		sys-devel/gcc-config
-	)
-
-	# glibc requies >=gcc-4.6
-	[[ $(gcc --version 2>&1) == *'gcc ('*') 4.'[678]* ]] || pkgs+=( sys-devel/gcc )
-
-	# rap binutils don't search for host libc, put to the end of phase 0
-	pkgs+=(
 		sys-devel/binutils-config
 		sys-devel/binutils
 	)
@@ -1231,9 +1183,14 @@ bootstrap_stage3() {
 	# --oneshot
 	local pkgs=(
 		"<net-misc/wget-1.13.4-r1" # until we fix #393277
-		dev-util/pkgconf
+		virtual/os-headers
 	)
 	emerge_pkgs "" "${pkgs[@]}" || return 1
+
+	# ugly hack to make sure we can compile glib without pkg-config,
+	# which is depended upon by shared-mime-info
+	export LIBFFI_CFLAGS="-I$(echo ${ROOT}/usr/lib*/libffi-*/include)"
+	export LIBFFI_LIBS="-lffi"
 
 	# for some yet unknown reason, libxml2 has a problem with zlib, but
 	# only during this stage, in the emerge -e system phase it is fine
@@ -1248,7 +1205,7 @@ bootstrap_stage3() {
 	# disable collision-protect to overwrite the bootstrapped portage
 	FEATURES="-collision-protect" emerge_pkgs "" "sys-apps/portage" || return 1
 
-	unset CPPFLAGS
+	unset LIBFFI_CFLAGS LIBFFI_LIBS CPPFLAGS
 
 	if [[ -d ${ROOT}/tmp/var/tmp ]] ; then
 		rm -Rf "${ROOT}"/tmp || return 1

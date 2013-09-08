@@ -1,6 +1,3 @@
-# first pass of gcc uses host libc
-sys-devel/gcc -rap
-
 # Most binary Linux distributions seem to fancy toolchains that do not
 # do c++ support (need to install a separate package).  Since we don't
 # check for g++, just make sure binutils won't try to build gold
