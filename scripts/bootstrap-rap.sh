@@ -1072,6 +1072,18 @@ bootstrap_stage3() {
 	emerge_pkgs --nodeps "${pkgs[@]}" || return 1
 
 	set_profile 1
+	echo 'int main() {}' > test-rpath.c
+	gcc -o test-rpath test-rpath.c
+	if readelf -d test-rpath | grep -q rpath; then
+		cat <<EOF
+
+Your present toolchain injects rpath into ELF, which causes glibc to
+fail. Please disable this feature for the moment and try again.
+
+EOF
+		return 1;
+	fi
+
 	case ${bootstrapCHOST} in
 		*-darwin*)
 			pkgs=( ${pkgs[@]} sys-apps/darwin-miscutils sys-libs/csu )
