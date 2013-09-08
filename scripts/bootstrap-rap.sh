@@ -1185,13 +1185,13 @@ EOF
 	local pkgs=(
 		sys-apps/file
 		app-admin/eselect
+		dev-util/pkgconf
 	)
 	emerge_pkgs --nodeps "${pkgs[@]}" || return 1
 
 	# --oneshot
 	local pkgs=(
-		"<net-misc/wget-1.13.4-r1" # until we fix #393277
-		dev-util/pkgconf
+		net-misc/wget
 	)
 	emerge_pkgs "" "${pkgs[@]}" || return 1
 
