@@ -94,14 +94,10 @@ efetch() {
 
 set_profile() {
 	# switch profiles in used for different phases of stage3
-    
 	# Phase 0: gcc first pass, linked against host libc, with
 	#          rpath to stage1 libraries
-    
 	# Phase 1: bootstrap base system on glibc
-    
 	# Phase 2: final
-	
 	local profile
 	case $1 in
 	0) profile="${PORTDIR_RAP}"/profiles/bootstrap/gcc ;;
@@ -1109,11 +1105,18 @@ bootstrap_stage3() {
 		dev-libs/mpfr
 		dev-libs/mpc
 		sys-kernel/linux-headers
-		sys-devel/binutils-config
 		sys-devel/gcc-config
-		sys-devel/binutils
-		$([[ $(gcc --version 2>&1) == *'gcc ('*') 4.'[678]* ]] || echo "sys-devel/gcc")
 	)
+
+	# glibc requies >=gcc-4.6
+	[[ $(gcc --version 2>&1) == *'gcc ('*') 4.'[678]* ]] || pkgs+=( sys-devel/gcc )
+
+	# rap binutils don't search for host libc, put to the end of phase 0
+	pkgs+=(
+		sys-devel/binutils-config
+		sys-devel/binutils
+	)
+
 	emerge_pkgs --nodeps "${pkgs[@]}" || return 1
 
 	set_profile 1
@@ -1195,12 +1198,12 @@ bootstrap_stage3() {
 			;;
 	esac
 
+	emerge_pkgs --nodeps "${pkgs[@]}" || return 1
+
 	[[ -f "${ROOT}"/etc/portage/make.profile/.gcc-rap-installed ]] || \
 		( emerge --nodeps --oneshot sys-devel/gcc && \
 			touch "${ROOT}"/etc/portage/make.profile/.gcc-rap-installed ) || \
 		return 1
-
-	emerge_pkgs --nodeps "${pkgs[@]}" || return 1
 
 	# we need pax-utils this early for OSX (before libiconv - gen_usr_ldscript)
 	# but also for perl, which uses scanelf/scanmacho to find compatible
