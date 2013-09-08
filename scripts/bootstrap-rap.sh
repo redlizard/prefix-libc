@@ -1084,6 +1084,16 @@ EOF
 		return 1;
 	fi
 
+	if [[ ! -x "${ROOT}"/usr/bin/perl ]]; then
+		local perlLoc=$(type -P perl)
+		if [[ -n ${perlLoc} ]]; then
+			ln -sf "${perlLoc}" "${ROOT}"/usr/bin/perl
+		else
+			echo "We need perl at ${ROOT}/usr/bin/perl to compile glibc."
+			return 1
+		fi
+	fi
+
 	case ${bootstrapCHOST} in
 		*-darwin*)
 			pkgs=( ${pkgs[@]} sys-apps/darwin-miscutils sys-libs/csu )
