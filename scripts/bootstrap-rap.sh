@@ -336,7 +336,7 @@ HOSTCC='gcc -m64'
 	echo "${profile}" > "${PORTDIR_RAP}"/profiles/bootstrap/parent
 
 	# REMOVE the following after migrating to gentoo-x86 base
-	echo "PORTDIR_OVERLAY=\"${PORTDIR_RAP}\"" >> "${ROOT}"/etc/make.conf
+	echo "PORTDIR_OVERLAY=\"${PORTDIR_RAP}\"" >> "${ROOT}"/etc/portage/make.conf
 	
 	# don't inject rpath at all. 
 	echo ">=sys-devel/binutils-config-3-r03.1" >> "${ROOT}"/etc/portage/package.mask
