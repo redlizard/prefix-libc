@@ -106,7 +106,7 @@ STDCXX_INCDIR=${TOOLCHAIN_STDCXX_INCDIR:-${LIBPATH}/include/g++-v${GCC_BRANCH_VE
 IUSE="multislot nls nptl regression-test vanilla"
 
 if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
-	IUSE+=" altivec cxx fortran"
+	IUSE+=" altivec cxx fortran rap"
 	[[ -n ${PIE_VER} ]] && IUSE+=" nopie"
 	[[ -n ${HTB_VER} ]] && IUSE+=" boundschecking"
 	[[ -n ${D_VER}   ]] && IUSE+=" d"
@@ -118,7 +118,7 @@ if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
 	tc_version_is_at_least 4.3 && IUSE+=" fixed-point"
 	tc_version_is_at_least 4.6 && IUSE+=" graphite"
 	tc_version_is_at_least 4.6 && IUSE+=" lto"
-	tc_version_is_at_least 4.7 && IUSE+=" go rap"
+	tc_version_is_at_least 4.7 && IUSE+=" go"
 fi
 
 # Support upgrade paths here or people get pissed
@@ -467,18 +467,6 @@ make_gcc_hard() {
 	BRANDING_GCC_PKGVERSION=${BRANDING_GCC_PKGVERSION/Gentoo/Gentoo Hardened}
 }
 
-prefix_gcc_dynamic_loader() {
-	local dlf
-
-	case $(tc-arch) in
-	amd64) dlf=i386/linux64.h ;;
-	arm) dlf=arm/linux-eabi.h ;;
-	x86) dlf=i386/linux.h ;;
-        esac
-
-	eprefixify gcc/config/${dlf}
-}
-
 create_gcc_env_entry() {
 	dodir /etc/env.d/gcc
 	local gcc_envd_base="/etc/env.d/gcc/${CTARGET}-${GCC_CONFIG_VER}"
@@ -587,6 +575,9 @@ toolchain_pkg_setup() {
 		ewarn "symlinks in your \${EPREFIX}."
 		ewarn "See http://gcc.gnu.org/bugzilla/show_bug.cgi?id=29831"
 	fi
+
+	# TPREFIX is the prefix of the CTARGET installation
+	export TPREFIX=${TPREFIX:-${EPREFIX}}
 
 	# we dont want to use the installed compiler's specs to build gcc!
 	unset GCC_SPECS
@@ -829,6 +820,11 @@ toolchain_src_unpack() {
 		eend $?
 	done
 	sed -i 's|A-Za-z0-9|[:alnum:]|g' "${S}"/gcc/*.awk #215828
+
+	if use rap; then
+		# Prefixify the dynamic linker location.
+		sed -i "s@-dynamic-linker @-dynamic-linker ${TPREFIX}@g" $(find gcc/config -name '*.h')
+	fi
 
 	if [[ -x contrib/gcc_update ]] ; then
 		einfo "Touching generated files"
@@ -1222,12 +1218,6 @@ gcc_do_configure() {
 			# should be /usr, because it's the path to search includes for,
 			# which is unrelated to TOOLCHAIN_PREFIX, a.k.a. PREFIX
 			confgcc+=( --with-local-prefix="${TPREFIX}"/usr )
-		fi
-
-		if use rap ; then
-			# use sysroot of toolchain to get currect include and library at
-			# compile time
-			confgcc+=( --with-sysroot="${EPREFIX}" )
 		fi
 	fi
 	# __cxa_atexit is "essential for fully standards-compliant handling of
