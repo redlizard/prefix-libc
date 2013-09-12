@@ -98,6 +98,7 @@ bootstrap_setup() {
 	local ldflags_make_defaults=""
 	local cppflags_make_defaults="CPPFLAGS=\"-I${ROOT}/usr/include -I${ROOT}/tmp/usr/include\""
 	local extra_make_globals=""
+	local rap=false
 	einfo "setting up some guessed defaults"
 	case ${CHOST} in
 		powerpc-apple-darwin7)
@@ -147,16 +148,12 @@ HOSTCC='gcc -m64'
 		i*86-pc-linux-gnu)
 			profile="${PORTDIR_RAP}/profiles/default/linux/x86/13.0/rap"
 			ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib -L${ROOT}/lib -L${ROOT}/tmp/usr/lib\""
-			extra_make_globals="
-PORTDIR_OVERLAY=\"${PORTDIR_RAP}\"
-"
+			rap=true
 			;;
 		x86_64-pc-linux-gnu)
 			profile="${PORTDIR_RAP}/profiles/default/linux/amd64/13.0/rap"
 			ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib64 -L${ROOT}/lib64 -L${ROOT}/tmp/usr/lib\""
-			extra_make_globals="
-PORTDIR_OVERLAY=\"${PORTDIR_RAP}\"
-"
+			rap=true
 			;;
 		ia64-pc-linux-gnu)
 			profile="${PORTDIR}/profiles/prefix/linux/ia64"
@@ -173,9 +170,7 @@ PORTDIR_OVERLAY=\"${PORTDIR_RAP}\"
 		armv7l-pc-linux-gnu)
 			profile="${PORTDIR_RAP}/profiles/default/linux/amd64/13.0/rap"
 			ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib -L${ROOT}/lib -L${ROOT}/tmp/usr/lib\""
-			extra_make_globals="
-PORTDIR_OVERLAY=\"${PORTDIR_RAP}\"
-"
+			rap=true
 			;;
 		sparc-sun-solaris2.9)
 			profile="${PORTDIR}/profiles/prefix/sunos/solaris/5.9/sparc"
@@ -327,53 +322,33 @@ HOSTCC='gcc -m64'
 		ln -s "${profile}" "${ROOT}"/etc/portage/make.profile
 		einfo "Your profile is set to ${profile}."
 
-		# Let's put all the custumizations in /etc/make.conf,
-		# which would be overwritten by /etc/portage/make.conf.
+		if ${rap}; then
+			echo "PORTDIR_OVERLAY=\"${PORTDIR_RAP}\"" >> ${ROOT}/etc/portage/make.conf
+			echo "
+sys-devel/binutils-config::gentoo_prefix
+sys-devel/binutils::gentoo_prefix
+sys-devel/gcc-config::gentoo_prefix
+sys-devel/gcc::gentoo_prefix
+sys-libs/glibc::gentoo_prefix
+" >> ${ROOT}/etc/portage/package.mask
+		fi
 
 		# make.globals is used for GCC overrides
-		echo "${extra_make_globals}" >> "${ROOT}"/etc/make.conf
-		# we will keep this overlay info after bootstrap
-		echo "${extra_make_globals}" >> "${ROOT}"/etc/make.conf.bak
+		echo "${extra_make_globals}" >> "${ROOT}"/etc/make.globals
+
+		# everything below applies only to the temporary portage install
+		mkdir -p "${EPREFIX}"/etc
+		cp -a "${ROOT}"/etc/make.globals "${ROOT}"/etc/portage "${EPREFIX}"/etc
+
 		# this is darn ugly, but we can't use the make.globals hack,
 		# since the profiles overwrite CFLAGS/LDFLAGS in numerous cases
-		echo "${cppflags_make_defaults}" >> "${ROOT}"/etc/make.conf
-		echo "${ldflags_make_defaults}" >> "${ROOT}"/etc/make.conf
-		# The default profiles (and IUSE defaults) introduce circular deps. By
-		# shoving this USE line into make.defaults, we can ensure that the
-		# end-user always avoids circular deps while bootstrapping and it gets
-		# wiped after a --sync. Also simplifies bootstrapping instructions.
-		echo "USE=\"-berkdb -fortran -gdbm -git -nls -pcre -ssl -python -readline bootstrap\"" >> "${ROOT}"/etc/make.conf
-		# and we don't need to spam the user about news until after a --sync
-		# because the tools aren't available to read the news item yet anyway.
-		echo 'FEATURES="${FEATURES} -news"' >> "${ROOT}"/etc/make.conf
-		# Disable the STALE warning because the snapshot frequently gets stale.
-		# DON'T REMOVE this one, stage3's tree check relies on this one
-		echo 'PORTAGE_SYNC_STALE=0' >> "${ROOT}"/etc/make.conf
-		# Set correct PYTHONPATH for Portage, since our Python lives in
-		# $EPREFIX/tmp, bug #407573
-		echo "PYTHONPATH=${ROOT}/usr/lib/portage/pym" >> "${ROOT}"/etc/make.conf
-		# Most binary Linux distributions seem to fancy toolchains that
-		# do not do c++ support (need to install a separate package).
-		# Since we don't check for g++, just make sure binutils won't
-		# try to build gold (needs c++), it will get there once we built
-		# our own GCC with c++ support.  For that reason we cannot
-		# globally mask cxx, because then GCC will be built without c++
-		# support too.
-		echo "sys-devel/binutils -cxx" >> "${ROOT}"/etc/portage/package.use
-		echo "dev-libs/gmp -cxx" >> "${ROOT}"/etc/portage/package.use
-
-		# don't inject rpath at all
-		echo ">=sys-devel/binutils-config-3-r03.1" >> "${ROOT}"/etc/portage/package.mask
+		echo "${cppflags_make_defaults}" >> "${ROOT}"/etc/portage/make.conf
+		echo "${ldflags_make_defaults}" >> "${ROOT}"/etc/portage/make.conf
 
 		einfo "Your portage config files are prepared for your current bootstrap"
 	fi
-	# Hack for bash because curses is not always available (linux).
-	# This will be wiped upon emerge --sync and back to normal.
 
 	[[ -d "${ROOT}"/etc/portage/env ]] || mkdir "${ROOT}"/etc/portage/env
-	
-	echo 'EXTRA_ECONF="--without-curses"' > "${ROOT}"/etc/portage/env/no-curses.conf
-	echo 'app-shells/bash no-curses.conf' >> "${ROOT}"/etc/portage/package.env
 }
 
 do_tree() {
@@ -399,8 +374,8 @@ bootstrap_tree() {
 	fi
 	
 	# this is ugly, we have to put the temperory rap overlay somewhere
-	PORTDIR="${PORTDIR_RAP}" \
-		do_tree http://dev.gentoo.org/~heroxbd rap-overlay.tar.bz2
+#	PORTDIR="${PORTDIR_RAP}" \
+#		do_tree http://dev.gentoo.org/~heroxbd rap-overlay.tar.bz2
 }
 
 bootstrap_latest_tree() {
@@ -519,6 +494,13 @@ bootstrap_portage() {
 	# in Prefix the sed wrapper is deadly, so kill it
 	rm -f "${ROOT}"/usr/lib/portage/bin/ebuild-helpers/sed
 
+	# HACK -- fixes a portage bug
+	sed -i 's/\tmysettings\["EPREFIX"\]/#&/' ${ROOT}/usr/lib/portage/pym/portage/package/ebuild/doebuild.py
+
+	# HACK HACK HACK -- this should be a portage feature somehow.
+	# Disable shebang QA checking during the bootstrap to avoid unnecessary effective dependencies.
+	sed -i 's/^.*# check shebangs.*$/return/' ${ROOT}/usr/lib/portage/bin/misc-functions.sh
+
 	einfo "${A%-*} successfully bootstrapped"
 }
 
@@ -540,56 +522,6 @@ prep_gcc-fsf() {
 
 	efetch ${GENTOO_MIRRORS}/distfiles/${GCC_A} || return 1
 
-}
-
-bootstrap_gcc() {
-
-	case ${CHOST} in
-		*-*-darwin*)
-			prep_gcc-apple
-			;;
-		*-*-solaris*)
-			prep_gcc-fsf
-			GCC_EXTRA_OPTS="--disable-multilib --with-gnu-ld"
-			;;
-		*)	
-			prep_gcc-fsf
-			;;
-	esac
-
-	GCC_LANG="c,c++"
-
-	export S="${PORTAGE_TMPDIR}/gcc-${GCC_PV}"
-	rm -rf "${S}"
-	mkdir -p "${S}"
-	cd "${S}"
-	einfo "Unpacking ${GCC_A}"
-	$TAR ${TAROPTS} "${DISTDIR}"/${GCC_A} || return 1
-
-	rm -rf "${S}"/build
-	mkdir -p "${S}"/build
-	cd "${S}"/build
-
-	${CONFIG_SHELL} ${S}/gcc-${GCC_PV}/configure \
-		--prefix="${ROOT}"/usr \
-		--mandir="${ROOT}"/usr/share/man \
-		--infodir="${ROOT}"/usr/share/info \
-		--datadir="${ROOT}"/usr/share \
-		--disable-checking \
-		--disable-werror \
-		--disable-nls \
-		--with-system-zlib \
-		--enable-languages=${GCC_LANG} \
-		${GCC_EXTRA_OPTS} \
-		|| return 1
-
-	$MAKE ${MAKEOPTS} bootstrap-lean || return 1
-
-	$MAKE install || return 1
-
-	cd "${ROOT}"
-	rm -Rf "${S}"
-	einfo "${GCC_A%-*} successfully bootstrapped"
 }
 
 bootstrap_gnu() {
@@ -1020,9 +952,6 @@ bootstrap_stage1() {
 	done
 	[[ -n ${zlib} ]] || (bootstrap_zlib) || return 1
 	
-	[[ $(ld --version 2>&1) == *"(GNU Binutils) "2.23* ]] \
-		|| (bootstrap_binutils) || return 1
-	
 	# too vital to rely on a host-provided one
 	[[ -x ${ROOT}/usr/bin/python ]] || (bootstrap_python) || return 1
 
@@ -1030,13 +959,19 @@ bootstrap_stage1() {
 }
 
 bootstrap_stage2() {
-	if [[ ${ROOT} == */tmp ]] ; then
-		eerror "stage2 cannot be used for paths that end in '/tmp'"
+	if [[ ${ROOT} != */tmp ]] ; then
+		eerror "stage2 can only be used for paths that end in '/tmp'"
 		return 1
 	fi
 
 	# checks itself if things need to be done still
 	bootstrap_tree || return 1
+	if ! [[ -e ${ROOT}/../usr/portage ]]; then
+		mkdir -p "${ROOT}"/../usr
+		mv "${ROOT}"/usr/portage "${ROOT}"/../usr
+		ln -s ../../usr/portage "${ROOT}"/usr/portage
+	fi
+
 	[[ -e ${ROOT}/etc/make.globals ]] || bootstrap_portage || return 1
 
 	einfo "stage2 successfully finished"
@@ -1053,14 +988,6 @@ bootstrap_stage3() {
 		return 1
 	fi
 
-	# stage2 as set a profile, which defines CHOST, so unset any CHOST
-	# we've got here to avoid cross-compilation due to slight
-	# differences caused by our guessing vs. what the profile sets.
-	# This happens at least on 32-bits Darwin, with i386 and i686.
-	# https://bugs.gentoo.org/show_bug.cgi?id=433948
-	local bootstrapCHOST=${CHOST}
-	unset CHOST
-
 	# No longer support gen_usr_ldscript stuff in new bootstraps, this
 	# must be in line with what eventually ends up in make.conf, see the
 	# end of this function.  We don't do this in bootstrap_setup()
@@ -1068,149 +995,162 @@ bootstrap_stage3() {
 	# right with manual bootstraps.
 	export PREFIX_DISABLE_GEN_USR_LDSCRIPT=yes 
 
+	# and we don't need to spam the user about news until after a --sync
+	# because the tools aren't available to read the news item yet anyway.
+	export FEATURES="${FEATURES} -news"
+
+	# The default profiles (and IUSE defaults) introduce circular deps. By
+	# shoving this USE line into make.defaults, we can ensure that the
+	# end-user always avoids circular deps while bootstrapping and it gets
+	# wiped after a --sync. Also simplifies bootstrapping instructions.
+	export USE="-acl -berkdb -gdbm -git -net -nls -pcre -ssl -python -readline bootstrap"
+
+	# Disable the STALE warning because the snapshot frequently gets stale.
+	# DON'T REMOVE this one, stage3's tree check relies on this one
+	export PORTAGE_SYNC_STALE=0
+
+	# Set correct PYTHONPATH for Portage, since our Python lives in
+	# $EPREFIX/tmp, bug #407573
+	export PYTHONPATH="${EPREFIX}/tmp/usr/lib/portage/pym"
+
 	emerge_pkgs() {
 		local opts=$1 ; shift
 		local pkg vdb pvdb evdb premerge
 		for pkg in "$@"; do
-			vdb=${pkg}
-			if [[ ${vdb} == "="* ]] ; then
-				vdb=${vdb#=}
-			elif [[ ${vdb} == "<"* ]] ; then
-				vdb=${vdb#<}
-				vdb=${vdb%-r*}
-				vdb=${vdb%-*}
-				vdb=${vdb}-\*
-			else
-				vdb=${vdb}-\*
-			fi
-			for pvdb in ${ROOT}/var/db/pkg/${vdb%-*}-* ; do
-				if [[ -d ${pvdb} ]] ; then
-					evdb=${pvdb##*/}
-					if [[ ${pkg} == "="* ]] ; then
-						# exact match required (* should work here)
-						[[ ${evdb} == ${vdb##*/} ]] && break
-					else
-						vdb=${vdb%-*}
-						evdb=${evdb%-r*}
-						evdb=${evdb%_p*}
-						evdb=${evdb%-*}
-						[[ ${evdb} == ${vdb#*/} ]] && break
-					fi
-				fi
-				pvdb=
-			done
-			[[ -n ${pvdb} ]] && continue
+			portageq has_version "${EPREFIX}" "${pkg}" && continue
 			# for a valid shebang, we have symlinked bin/bash already
 			[[ ${pkg} == *"app-shells/bash"* ]] &&
 			premerge="FEATURES='${FEATURES} -collision-protect'"
-			eval ${premerge} 'emerge -v --oneshot ${opts} "${pkg}"'
+			eval ${premerge} 'emerge -v --root-deps --oneshot ${opts} "${pkg}"'
 			[[ $? -eq 0 ]] || return 1
 		done
 	}
+	
+	emerge_host_pkgs() {
+		PORTAGE_CONFIGROOT="${EPREFIX}"/tmp \
+		EPREFIX="${EPREFIX}"/tmp \
+		emerge_pkgs "$@"
+	}
+
+	emerge_target_pkgs() {
+		PORTAGE_CONFIGROOT="${EPREFIX}" \
+		EPREFIX="${EPREFIX}" \
+		emerge_pkgs "$@"
+	}
+
+	mangle_triple() {
+		PARTS=(${1//-/ })
+		if [[ ${#PARTS[@]} = 4 ]]; then
+			echo ${PARTS[0]}-${PARTS[1]}_tmp-${PARTS[2]}-${PARTS[3]}
+		elif [[ ${#PARTS[@]} = 3 ]]; then
+			echo ${PARTS[0]}-tmp-${PARTS[1]}-${PARTS[2]}
+		else
+			eerror "Invalid host triple $CHOST, giving up."
+			exit 1
+		fi
+	}
+	
+	unset CHOST
+	CHOST=$("${EPREFIX}"/tmp/usr/bin/portageq envvar CHOST)
+	XHOST=$(mangle_triple ${CHOST})
+
+	emerge_target_pkgs --nodeps sys-apps/baselayout-prefix || return 1
+
+	if "${EPREFIX}"/tmp/usr/bin/portageq envvar USE | grep -E '\Wrap\W' >/dev/null; then
+		if ! [[ -e ${EPREFIX}/tmp/cross-overlay ]]; then
+			mkdir -p "${EPREFIX}"/tmp/cross-overlay
+			mkdir -p "${EPREFIX}"/tmp/cross-overlay/profiles
+			echo cross_overlay > "${EPREFIX}"/tmp/cross-overlay/profiles/repo_name
+			mkdir -p "${EPREFIX}"/tmp/cross-overlay/cross-"${CHOST}"
+			cp -r "${PORTDIR_RAP}"/{sys-devel/binutils,sys-devel/gcc,sys-libs/glibc} "${PORTDIR}"/sys-kernel/linux-headers "${EPREFIX}"/tmp/cross-overlay/cross-"${CHOST}"
+			cp -r "${PORTDIR_RAP}"/eclass "${EPREFIX}/tmp/cross-overlay"
+			echo "PORTDIR_OVERLAY=\"\${PORTDIR_OVERLAY} ${EPREFIX}/tmp/cross-overlay\"" >> ${EPREFIX}/tmp/etc/portage/make.conf
+			echo "cross-${CHOST}" >> ${EPREFIX}/tmp/etc/portage/categories
+		fi
+
+		local pkgs=(
+			sys-apps/baselayout-prefix
+			app-arch/xz-utils
+			sys-devel/binutils-config
+			sys-devel/gcc-config
+		)
+		emerge_host_pkgs --nodeps "${pkgs[@]}" || return 1
+
+		local pkgs=(
+			dev-libs/gmp
+			dev-libs/mpfr
+			dev-libs/mpc
+		)
+		USE="${USE} static-libs -cxx" \
+		EXTRA_ECONF=--disable-shared \
+		emerge_host_pkgs --nodeps "${pkgs[@]}" || return 1
+
+		CTARGET=${CHOST} \
+		CHOST=${XHOST} \
+		emerge_host_pkgs --nodeps cross-${CHOST}/linux-headers || return 1
+
+		CTARGET=${CHOST} \
+		CHOST=${XHOST} \
+		USE="${USE} crosscompile_opts_headers-only" \
+		emerge_host_pkgs --nodeps cross-${CHOST}/glibc || return 1
+
+		TPREFIX="${EPREFIX}" \
+		CTARGET=${CHOST} \
+		CHOST=${XHOST} \
+		USE="${USE} -cxx -nls -zlib" \
+		emerge_host_pkgs --nodeps cross-${CHOST}/binutils || return 1
+
+		TPREFIX="${EPREFIX}" \
+		EXTRA_ECONF="--with-sysroot=${EPREFIX}/tmp/usr/${CHOST}" \
+		CTARGET=${CHOST} \
+		CHOST=${XHOST} \
+		USE="${USE} -cxx -fortran -openmp -mudflap" \
+		emerge_host_pkgs --nodeps cross-${CHOST}/gcc || return 1
+
+		CBUILD=${XHOST} \
+		emerge_target_pkgs --nodeps sys-kernel/linux-headers || return 1
+
+		CBUILD=${XHOST} \
+		emerge_target_pkgs --nodeps sys-libs/glibc || return 1
+
+		# Convince portage that we have a full glibc
+		rm -rf "${EPREFIX}"/tmp/var/db/pkg/cross-${CHOST}/glibc-*
+		cp -R "${EPREFIX}"/var/db/pkg/sys-libs/glibc-* "${EPREFIX}"/tmp/var/db/pkg/cross-${CHOST}
+
+		grep cxx "${EPREFIX}"/tmp/var/db/pkg/cross-${CHOST}/gcc-*/USE >/dev/null || \
+		TPREFIX="${EPREFIX}" \
+		EPREFIX="${EPREFIX}"/tmp \
+		CTARGET=${CHOST} \
+		CHOST=${XHOST} \
+		emerge --oneshot --nodeps cross-${CHOST}/gcc || return 1
+	else
+		error This script currently only supports RAP.
+		exit 1
+	fi
+
+	export EPREFIX
+	export PORTAGE_CONFIGROOT=${EPREFIX}
 
 	# --oneshot --nodeps
 	local pkgs=(
+		sys-libs/ncurses
+		sys-libs/readline
+		app-shells/bash
+		sys-libs/zlib
 		dev-libs/gmp
 		dev-libs/mpfr
 		dev-libs/mpc
-		sys-libs/zlib
-		# sys-apps/sed
-		# "<app-shells/bash-4.2_p20"  # higher versions require readline
-		# app-arch/xz-utils
-		sys-kernel/linux-headers
-		# >=glibc-2.16 requires at least gcc-4.3 and binutils-2.20
-		sys-apps/baselayout-prefix
-		# sys-devel/m4
-		# sys-devel/flex
-		# sys-devel/bison
 		sys-devel/binutils-config
 		sys-devel/gcc-config
+		sys-devel/binutils
+		sys-devel/gcc
 	)
-
-	case ${bootstrapCHOST} in
-		*-darwin*)
-			pkgs=( ${pkgs[@]} sys-apps/darwin-miscutils sys-libs/csu )
-			case "$(gcc --version)" in
-				*"(GCC) 4.2.1 "*)
-					pkgs=( ${pkgs[@]} sys-devel/binutils-apple )
-					;;
-				*"(GCC) 4.0.1 "*)
-					pkgs=( ${pkgs[@]} "=sys-devel/binutils-apple-3.2" )
-					;;
-				*)
-					eerror "unknown GCC compiler"
-					return 1
-					;;
-			esac
-			pkgs=( ${pkgs[@]} sys-devel/gcc-apple )
-			;;
-		i?86-*-solaris*)
-			# 4.2/x86 can't cope with Sun ld/as
-			# results in a bootstrap compare mismatch
-
-			# Figure out what Solaris we're on.  Since Solaris 10u10
-			# some Solaris 11 changes have been integrated that
-			# implement some GNU extensions to ELF.  This most notably
-			# is the VERSYM_HIDDEN flag, that GCC 4.1 doesn't know
-			# about, resulting in a libstdc++.so that cannot find these
-			# hidden symbols.  GCC 4.2 knows about these, so we must
-			# have it there.  Unfortunately, 4.2 doesn't always compile,
-			# so we need to perform the expensive 4.1 -> 4.2 -> current.
-			local SOLARIS_RELEASE=$(head -n1 /etc/release)
-			local needgcc42=
-			case "${SOLARIS_RELEASE}" in
-				*"Solaris 10"*)
-					# figure out major update level
-					SOLARIS_RELEASE=${SOLARIS_RELEASE##*s10s_u}
-					SOLARIS_RELEASE=${SOLARIS_RELEASE%%wos_*}
-					if [[ "${SOLARIS_RELEASE}" -ge "10" ]] ; then
-						needgcc42="=sys-devel/gcc-4.2*"
-					fi
-					;;
-				*)
-					# assume all the rest is Oracle Solaris 11,
-					# OpenSolaris, OpenIndiana, SmartOS, whatever,
-					# thus > Solaris 10u10
-					needgcc42="=sys-devel/gcc-4.2*"
-					;;
-			esac
-
-			pkgs=(
-				${pkgs[@]}
-				sys-devel/binutils
-				"=sys-devel/gcc-4.1*"
-				${needgcc42}
-			)
-			;;
-		sparc-*-solaris2.11)
-			# unknown what the problem is here
-			pkgs=(
-				${pkgs[@]}
-				sys-devel/binutils
-				"=sys-devel/gcc-4.1*"
-				"=sys-devel/gcc-4.2*"
-			)
-			;;
-		*-*-aix*)
-			pkgs=(
-				${pkgs[@]}
-				"=sys-devel/gcc-4.2*"
-			)
-			;;
-		*)
-			pkgs=(
-				${pkgs[@]}
-				'=sys-libs/glibc-2.10*'
-				sys-devel/gcc
-				sys-devel/binutils
-			)
-			;;
-	esac
-
+	CBUILD=${XHOST} \
 	emerge_pkgs --nodeps "${pkgs[@]}" || return 1
 
-	echo "great just stop here..."
-	return 0
+	exit 1
+
+
 
 	# we need pax-utils this early for OSX (before libiconv - gen_usr_ldscript)
 	# but also for perl, which uses scanelf/scanmacho to find compatible
@@ -1867,7 +1807,7 @@ EOF
 		exit 1
 	fi
 
-	if ! [[ -x ${EPREFIX}/usr/lib/portage/bin/emerge ]] && ! ${BASH} ${BASH_SOURCE[0]} "${EPREFIX}" stage2 ; then
+	if ! [[ -x ${EPREFIX}/usr/lib/portage/bin/emerge ]] && ! ${BASH} ${BASH_SOURCE[0]} "${EPREFIX}/tmp" stage2 ; then
 		# stage 2 fail
 		cat << EOF
 
