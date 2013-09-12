@@ -49,15 +49,6 @@ src_unpack() {
 
 	toolchain_src_unpack
 
-        epatch "${FILESDIR}"/gcc-4.7-rap.patch
-	local dlf
-	case $(tc-arch) in
-	amd64) dlf=i386/linux64.h ;;
-	arm) dlf=arm/linux-eabi.h ;;
-	x86) dlf=i386/linux.h ;;
-        esac
-	eprefixify gcc/config/${dlf}
-
 	use vanilla && return 0
 
 	[[ ${CHOST} == ${CTARGET} ]] && epatch "${FILESDIR}"/gcc-spec-env.patch
