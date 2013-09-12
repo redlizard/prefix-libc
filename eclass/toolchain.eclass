@@ -821,6 +821,11 @@ toolchain_src_unpack() {
 	done
 	sed -i 's|A-Za-z0-9|[:alnum:]|g' "${S}"/gcc/*.awk #215828
 
+	if use rap; then
+		# Prefixify the dynamic linker location.
+		sed -i "s@-dynamic-linker @-dynamic-linker ${TPREFIX}@g" $(find gcc/config -name '*.h')
+	fi
+
 	if [[ -x contrib/gcc_update ]] ; then
 		einfo "Touching generated files"
 		./contrib/gcc_update --touch | \
