@@ -1013,6 +1013,9 @@ bootstrap_stage3() {
 	# $EPREFIX/tmp, bug #407573
 	export PYTHONPATH="${EPREFIX}/tmp/usr/lib/portage/pym"
 
+	# The ${EPREFIX}/tmp portage should prefer ${EPREFIX} tools over ${EPREFIX}/tmp ones.
+	export PREROOTPATH="${EPREFIX}/usr/bin:${EPREFIX}/bin"
+
 	emerge_pkgs() {
 		local opts=$1 ; shift
 		local pkg vdb pvdb evdb premerge
@@ -1071,6 +1074,9 @@ bootstrap_stage3() {
 		local pkgs=(
 			sys-apps/baselayout-prefix
 			app-arch/xz-utils
+			sys-devel/m4
+			sys-devel/flex
+			sys-devel/bison
 			sys-devel/binutils-config
 			sys-devel/gcc-config
 		)
@@ -1084,6 +1090,10 @@ bootstrap_stage3() {
 		USE="${USE} static-libs -cxx" \
 		EXTRA_ECONF=--disable-shared \
 		emerge_host_pkgs --nodeps "${pkgs[@]}" || return 1
+
+		# we need perl to install linux-headers, but we prefer not to temporarily build
+		# the entire dependency tree here if the host already has a serviceable one.
+		type -P perl > /dev/null || emerge_host_pkgs dev-lang/perl || return 1
 
 		CTARGET=${CHOST} \
 		CHOST=${XHOST} \
@@ -1148,10 +1158,6 @@ bootstrap_stage3() {
 	CBUILD=${XHOST} \
 	emerge_pkgs --nodeps "${pkgs[@]}" || return 1
 
-	exit 1
-
-
-
 	# we need pax-utils this early for OSX (before libiconv - gen_usr_ldscript)
 	# but also for perl, which uses scanelf/scanmacho to find compatible
 	# lib-dirs
@@ -1172,20 +1178,15 @@ bootstrap_stage3() {
 	local pkgs=(
 		sys-apps/file
 		app-admin/eselect
+		dev-util/pkgconf
 	)
 	emerge_pkgs --nodeps "${pkgs[@]}" || return 1
 
 	# --oneshot
 	local pkgs=(
-		"<net-misc/wget-1.13.4-r1" # until we fix #393277
-		virtual/os-headers
+		net-misc/wget
 	)
 	emerge_pkgs "" "${pkgs[@]}" || return 1
-
-	# ugly hack to make sure we can compile glib without pkg-config,
-	# which is depended upon by shared-mime-info
-	export LIBFFI_CFLAGS="-I$(echo ${ROOT}/usr/lib*/libffi-*/include)"
-	export LIBFFI_LIBS="-lffi"
 
 	# for some yet unknown reason, libxml2 has a problem with zlib, but
 	# only during this stage, in the emerge -e system phase it is fine
@@ -1200,7 +1201,7 @@ bootstrap_stage3() {
 	# disable collision-protect to overwrite the bootstrapped portage
 	FEATURES="-collision-protect" emerge_pkgs "" "sys-apps/portage" || return 1
 
-	unset LIBFFI_CFLAGS LIBFFI_LIBS CPPFLAGS
+	unset CPPFLAGS
 
 	if [[ -d ${ROOT}/tmp/var/tmp ]] ; then
 		rm -Rf "${ROOT}"/tmp || return 1
@@ -1921,6 +1922,12 @@ if [[ -z ${CHOST} ]]; then
 						;;
 					powerpc*)
 						CHOST="`uname -m`-unknown-linux-gnu"
+						;;
+					armv7l)
+						CHOST=armv7a-hardfloat-linux-gnueabi
+						;;
+					armv5te*)
+						CHOST=armv5tel-softfloat-linux-gnueabi
 						;;
 					*)
 						CHOST="`uname -m`-pc-linux-gnu"
