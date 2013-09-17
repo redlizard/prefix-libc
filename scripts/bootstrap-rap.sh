@@ -1094,85 +1094,21 @@ EOF
 		fi
 	fi
 
-	case ${bootstrapCHOST} in
-		*-darwin*)
-			pkgs=( ${pkgs[@]} sys-apps/darwin-miscutils sys-libs/csu )
-			case "$(gcc --version)" in
-				*"(GCC) 4.2.1 "*)
-					pkgs=( ${pkgs[@]} sys-devel/binutils-apple )
-					;;
-				*"(GCC) 4.0.1 "*)
-					pkgs=( ${pkgs[@]} "=sys-devel/binutils-apple-3.2" )
-					;;
-				*)
-					eerror "unknown GCC compiler"
-					return 1
-					;;
-			esac
-			pkgs=( ${pkgs[@]} sys-devel/gcc-apple )
-			;;
-		i?86-*-solaris*)
-			# 4.2/x86 can't cope with Sun ld/as
-			# results in a bootstrap compare mismatch
+	pkgs=( sys-libs/glibc )
+	emerge_pkgs --nodeps "${pkgs[@]}" || return 1
 
-			# Figure out what Solaris we're on.  Since Solaris 10u10
-			# some Solaris 11 changes have been integrated that
-			# implement some GNU extensions to ELF.  This most notably
-			# is the VERSYM_HIDDEN flag, that GCC 4.1 doesn't know
-			# about, resulting in a libstdc++.so that cannot find these
-			# hidden symbols.  GCC 4.2 knows about these, so we must
-			# have it there.  Unfortunately, 4.2 doesn't always compile,
-			# so we need to perform the expensive 4.1 -> 4.2 -> current.
-			local SOLARIS_RELEASE=$(head -n1 /etc/release)
-			local needgcc42=
-			case "${SOLARIS_RELEASE}" in
-				*"Solaris 10"*)
-					# figure out major update level
-					SOLARIS_RELEASE=${SOLARIS_RELEASE##*s10s_u}
-					SOLARIS_RELEASE=${SOLARIS_RELEASE%%wos_*}
-					if [[ "${SOLARIS_RELEASE}" -ge "10" ]] ; then
-						needgcc42="=sys-devel/gcc-4.2*"
-					fi
-					;;
-				*)
-					# assume all the rest is Oracle Solaris 11,
-					# OpenSolaris, OpenIndiana, SmartOS, whatever,
-					# thus > Solaris 10u10
-					needgcc42="=sys-devel/gcc-4.2*"
-					;;
-			esac
+	# in gcc bootstrap stage 1, xgcc/cc1 and friends may be linked against libgcc_s.so of
+	# the old gcc, which cannot be found on new RAP. Append that directory to ld.so.conf
+	# so that our RAP dynamic linker can find it. This will be overwritten by env-update
+	# afterwards.
+	local oldGCC
+	# in case CHOST-gcc is different from gcc in PATH
+	oldGCC=$(type -P $(portageq envvar CHOST)-gcc)
+	[[ -n ${oldGCC} ]] || oldGCC=$(type -P gcc)
+	dirname $(${oldGCC} -print-libgcc-file-name) >> ${ROOT}/etc/ld.so.conf
+	${ROOT}/usr/sbin/ldconfig
 
-			pkgs=(
-				${pkgs[@]}
-				sys-devel/binutils
-				"=sys-devel/gcc-4.1*"
-				${needgcc42}
-			)
-			;;
-		sparc-*-solaris2.11)
-			# unknown what the problem is here
-			pkgs=(
-				${pkgs[@]}
-				sys-devel/binutils
-				"=sys-devel/gcc-4.1*"
-				"=sys-devel/gcc-4.2*"
-			)
-			;;
-		*-*-aix*)
-			pkgs=(
-				${pkgs[@]}
-				"=sys-devel/gcc-4.2*"
-			)
-			;;
-		*)
-			# gcc second pass to link against new gilbc
-			pkgs=(
-				sys-libs/glibc
-				sys-devel/gcc
-			)
-			;;
-	esac
-
+	pkgs=( sys-devel/gcc )
 	emerge_pkgs --nodeps "${pkgs[@]}" || return 1
 
 	# we need pax-utils this early for OSX (before libiconv - gen_usr_ldscript)
@@ -1202,6 +1138,7 @@ EOF
 	# --oneshot
 	local pkgs=(
 		net-misc/wget
+		sys-apps/acl
 	)
 	emerge_pkgs "" "${pkgs[@]}" || return 1
 
@@ -1227,15 +1164,8 @@ EOF
 
 	set_profile 2
 
-	# activate last compiler (some Solaris cases), needed for mpc and
-	# deps below
-	gcc-config $(gcc-config -l | wc -l)
-
 	# Portage should figure out itself what it needs to do, if anything
 	USE=-git emerge -u system || return 1
-
-	# activate last compiler
-	gcc-config $(gcc-config -l | wc -l)
 
 	# remove anything that we don't need (compilers most likely)
 	emerge --depclean
