@@ -497,6 +497,9 @@ bootstrap_portage() {
 	# HACK -- fixes a portage bug
 	sed -i 's/\tmysettings\["EPREFIX"\]/#&/' ${ROOT}/usr/lib/portage/pym/portage/package/ebuild/doebuild.py
 
+	# HACK -- fixes a portage bug
+	sed -i 's@PKG_CONFIG_PATH=/usr/${!x}/pkgconfig@PKG_CONFIG_PATH=${EPREFIX}/usr/${!x}/pkgconfig@' ${ROOT}/usr/lib/portage/bin/phase-functions.sh
+
 	# HACK HACK HACK -- this should be a portage feature somehow.
 	# Disable shebang QA checking during the bootstrap to avoid unnecessary effective dependencies.
 	sed -i 's/^.*# check shebangs.*$/return/' ${ROOT}/usr/lib/portage/bin/misc-functions.sh
@@ -1196,12 +1199,13 @@ bootstrap_stage3() {
 	# we can work around this by defining NO_LARGEFILE_SOURCE for libxml.h
 	# since we have the compiler emerged, it's no problem we wipe out
 	# the -I directions set by the profile
-	export CPPFLAGS="${CPPFLAGS} -DNO_LARGEFILE_SOURCE"
+#	export CPPFLAGS="${CPPFLAGS} -DNO_LARGEFILE_SOURCE"
 
-	# disable collision-protect to overwrite the bootstrapped portage
-	FEATURES="-collision-protect" emerge_pkgs "" "sys-apps/portage" || return 1
+	emerge_pkgs "" sys-apps/portage || return 1
 
-	unset CPPFLAGS
+#	unset CPPFLAGS
+
+	exit 1
 
 	if [[ -d ${ROOT}/tmp/var/tmp ]] ; then
 		rm -Rf "${ROOT}"/tmp || return 1
