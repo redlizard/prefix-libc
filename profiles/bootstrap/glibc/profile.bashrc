@@ -4,6 +4,7 @@
 # We don't know why gcc pass 1 have /usr/include as higher priority than
 # ${EPREFIX}/usr/include, which is not the case in Prefix. Keep this hack
 # here until we find out why.
+# We need this hack to make sure gcc is built against mpc/mpfr/gmp in RAP
 
 if [[ ${PN} == gcc ]]; then
 	CPPFLAGS="-I\"${EPREFIX}\"/usr/include"

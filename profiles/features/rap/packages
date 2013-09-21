@@ -1,11 +1,12 @@
-# kmod has not been prefixified
--*virtual/modutils
-
-# shadow has not been prefixified
--*virtual/shadow
-
-# don't need in rap
--*virtual/dev-manager
-
-# permission is not handled by portage for normal users
+# not crucial for rap, install it optionally
+-*sys-apps/openrc
+-*>=sys-apps/baselayout-2
 -*net-misc/iputils
+-*sys-apps/kbd
+-*sys-process/procps
+-*sys-process/psmisc
+-*sys-fs/e2fsprogs
+-*virtual/dev-manager
+-*virtual/modutils
+-*virtual/shadow
+-*sys-apps/net-tools
