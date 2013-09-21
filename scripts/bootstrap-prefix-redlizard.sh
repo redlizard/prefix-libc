@@ -1173,37 +1173,13 @@ bootstrap_stage3() {
 		sys-apps/grep
 		sys-apps/gawk
 		sys-devel/make
-		sys-libs/zlib
-	)
-	emerge_pkgs "" "${pkgs[@]}" || return 1
-
-	# --oneshot --nodeps
-	local pkgs=(
 		sys-apps/file
 		app-admin/eselect
 		dev-util/pkgconf
-	)
-	emerge_pkgs --nodeps "${pkgs[@]}" || return 1
-
-	# --oneshot
-	local pkgs=(
 		net-misc/wget
+		sys-apps/portage
 	)
 	emerge_pkgs "" "${pkgs[@]}" || return 1
-
-	# for some yet unknown reason, libxml2 has a problem with zlib, but
-	# only during this stage, in the emerge -e system phase it is fine
-	# it boils down to zlib headers replacing gzopen with gzopen64, but
-	# no gzopen64 prototype being defined, due to libxml.h messing with
-	# FILE_OFFSET_BITS
-	# we can work around this by defining NO_LARGEFILE_SOURCE for libxml.h
-	# since we have the compiler emerged, it's no problem we wipe out
-	# the -I directions set by the profile
-#	export CPPFLAGS="${CPPFLAGS} -DNO_LARGEFILE_SOURCE"
-
-	emerge_pkgs "" sys-apps/portage || return 1
-
-#	unset CPPFLAGS
 
 	exit 1
 
