@@ -21,7 +21,7 @@ SRC_URI="http://www.python.org/ftp/python/${PV}/${MY_P}.tar.bz2
 LICENSE="PSF-2"
 SLOT="2.7"
 KEYWORDS="~ppc-aix ~x64-freebsd ~x86-freebsd ~hppa-hpux ~ia64-hpux ~x86-interix ~amd64-linux ~ia64-linux ~x86-linux ~ppc-macos ~x64-macos ~x86-macos ~m68k-mint ~sparc-solaris ~sparc64-solaris ~x64-solaris ~x86-solaris"
-IUSE="aqua -berkdb build doc elibc_uclibc examples gdbm hardened ipv6 +ncurses +readline sqlite +ssl +threads tk +wide-unicode wininst +xml"
+IUSE="aqua -berkdb build doc elibc_uclibc examples gdbm hardened ipv6 +ncurses rap +readline sqlite +ssl +threads tk +wide-unicode wininst +xml"
 
 # Do not add a dependency on dev-lang/python to this ebuild.
 # If you need to apply a patch which requires python for bootstrapping, please
@@ -194,7 +194,7 @@ src_configure() {
 		append-ldflags -L${EPREFIX}/$(get_libdir)
 		append-ldflags -L${EPREFIX}/usr/$(get_libdir)
 		# fix compilation on some 64-bits Linux hosts, #381163
-		for hostlibdir in /usr/lib32 /usr/lib64 /lib32 /lib64 ; do
+		use rap || for hostlibdir in /usr/lib32 /usr/lib64 /lib32 /lib64 ; do
 			[[ -d ${hostlibdir} ]] || continue
 			append-ldflags -L${hostlibdir}
 		done

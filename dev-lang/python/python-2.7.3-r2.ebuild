@@ -22,7 +22,7 @@ LICENSE="PSF-2"
 SLOT="2.7"
 PYTHON_ABI="${SLOT}"
 KEYWORDS="~ppc-aix ~x64-freebsd ~x86-freebsd ~hppa-hpux ~ia64-hpux ~x86-interix ~amd64-linux ~ia64-linux ~x86-linux ~ppc-macos ~x64-macos ~x86-macos ~m68k-mint ~sparc-solaris ~sparc64-solaris ~x64-solaris ~x86-solaris"
-IUSE="aqua -berkdb build doc elibc_uclibc examples gdbm hardened ipv6 +ncurses +readline sqlite +ssl +threads tk +wide-unicode wininst +xml"
+IUSE="aqua -berkdb build doc elibc_uclibc examples gdbm hardened ipv6 +ncurses rap +readline sqlite +ssl +threads tk +wide-unicode wininst +xml"
 
 RDEPEND="app-arch/bzip2
 		>=sys-libs/zlib-1.1.3
@@ -190,7 +190,7 @@ src_configure() {
 		append-ldflags -L${EPREFIX}/$(get_libdir)
 		append-ldflags -L${EPREFIX}/usr/$(get_libdir)
 		# fix compilation on some 64-bits Linux hosts, #381163
-		for hostlibdir in /usr/lib32 /usr/lib64 /lib32 /lib64 ; do
+		use rap || for hostlibdir in /usr/lib32 /usr/lib64 /lib32 /lib64 ; do
 			[[ -d ${hostlibdir} ]] || continue
 			append-ldflags -L${hostlibdir}
 		done
