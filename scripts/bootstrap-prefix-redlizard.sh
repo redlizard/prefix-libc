@@ -1021,14 +1021,10 @@ bootstrap_stage3() {
 
 	emerge_pkgs() {
 		local opts=$1 ; shift
-		local pkg vdb pvdb evdb premerge
+		local pkg
 		for pkg in "$@"; do
 			portageq has_version "${EPREFIX}" "${pkg}" && continue
-			# for a valid shebang, we have symlinked bin/bash already
-			[[ ${pkg} == *"app-shells/bash"* ]] &&
-			premerge="FEATURES='${FEATURES} -collision-protect'"
-			eval ${premerge} 'emerge -v --root-deps --oneshot ${opts} "${pkg}"'
-			[[ $? -eq 0 ]] || return 1
+			emerge -v --root-deps --oneshot ${opts} "${pkg}" || return 1
 		done
 	}
 	
@@ -1057,88 +1053,90 @@ bootstrap_stage3() {
 	}
 	
 	unset CHOST
-	CHOST=$("${EPREFIX}"/tmp/usr/bin/portageq envvar CHOST)
+	CHOST=$(portageq envvar CHOST)
 	XHOST=$(mangle_triple ${CHOST})
 
 	emerge_target_pkgs --nodeps sys-apps/baselayout-prefix || return 1
 
-	if "${EPREFIX}"/tmp/usr/bin/portageq envvar USE | grep -E '\Wrap\W' >/dev/null; then
-		if ! [[ -e ${EPREFIX}/tmp/cross-overlay ]]; then
-			mkdir -p "${EPREFIX}"/tmp/cross-overlay
-			mkdir -p "${EPREFIX}"/tmp/cross-overlay/profiles
-			echo cross_overlay > "${EPREFIX}"/tmp/cross-overlay/profiles/repo_name
-			mkdir -p "${EPREFIX}"/tmp/cross-overlay/cross-"${CHOST}"
-			cp -r "${PORTDIR_RAP}"/{sys-devel/binutils,sys-devel/gcc,sys-libs/glibc} "${PORTDIR}"/sys-kernel/linux-headers "${EPREFIX}"/tmp/cross-overlay/cross-"${CHOST}"
-			cp -r "${PORTDIR_RAP}"/eclass "${EPREFIX}/tmp/cross-overlay"
-			echo "PORTDIR_OVERLAY=\"\${PORTDIR_OVERLAY} ${EPREFIX}/tmp/cross-overlay\"" >> ${EPREFIX}/tmp/etc/portage/make.conf
-			echo "cross-${CHOST}" >> ${EPREFIX}/tmp/etc/portage/categories
+	if [[ ! -e ${EPREFIX}/usr/bin/emerge ]]; then
+		if "${EPREFIX}"/tmp/usr/bin/portageq envvar USE | grep -E '\Wrap\W' >/dev/null; then
+			if ! [[ -e ${EPREFIX}/tmp/cross-overlay ]]; then
+				mkdir -p "${EPREFIX}"/tmp/cross-overlay
+				mkdir -p "${EPREFIX}"/tmp/cross-overlay/profiles
+				echo cross_overlay > "${EPREFIX}"/tmp/cross-overlay/profiles/repo_name
+				mkdir -p "${EPREFIX}"/tmp/cross-overlay/cross-"${CHOST}"
+				cp -r "${PORTDIR_RAP}"/{sys-devel/binutils,sys-devel/gcc,sys-libs/glibc} "${PORTDIR}"/sys-kernel/linux-headers "${EPREFIX}"/tmp/cross-overlay/cross-"${CHOST}"
+				cp -r "${PORTDIR_RAP}"/eclass "${EPREFIX}/tmp/cross-overlay"
+				echo "PORTDIR_OVERLAY=\"\${PORTDIR_OVERLAY} ${EPREFIX}/tmp/cross-overlay\"" >> ${EPREFIX}/tmp/etc/portage/make.conf
+				echo "cross-${CHOST}" >> ${EPREFIX}/tmp/etc/portage/categories
+			fi
+	
+			local pkgs=(
+				sys-apps/baselayout-prefix
+				app-arch/xz-utils
+				sys-devel/m4
+				sys-devel/flex
+				sys-devel/bison
+				sys-devel/binutils-config
+				sys-devel/gcc-config
+			)
+			emerge_host_pkgs --nodeps "${pkgs[@]}" || return 1
+	
+			local pkgs=(
+				dev-libs/gmp
+				dev-libs/mpfr
+				dev-libs/mpc
+			)
+			USE="${USE} static-libs -cxx" \
+			EXTRA_ECONF=--disable-shared \
+			emerge_host_pkgs --nodeps "${pkgs[@]}" || return 1
+	
+			# we need perl to install linux-headers, but we prefer not to temporarily build
+			# the entire dependency tree here if the host already has a serviceable one.
+			type -P perl > /dev/null || emerge_host_pkgs dev-lang/perl || return 1
+	
+			CTARGET=${CHOST} \
+			CHOST=${XHOST} \
+			emerge_host_pkgs --nodeps cross-${CHOST}/linux-headers || return 1
+	
+			CTARGET=${CHOST} \
+			CHOST=${XHOST} \
+			USE="${USE} crosscompile_opts_headers-only" \
+			emerge_host_pkgs --nodeps cross-${CHOST}/glibc || return 1
+	
+			TPREFIX="${EPREFIX}" \
+			CTARGET=${CHOST} \
+			CHOST=${XHOST} \
+			USE="${USE} -cxx -nls -zlib" \
+			emerge_host_pkgs --nodeps cross-${CHOST}/binutils || return 1
+	
+			TPREFIX="${EPREFIX}" \
+			EXTRA_ECONF="--with-sysroot=${EPREFIX}/tmp/usr/${CHOST}" \
+			CTARGET=${CHOST} \
+			CHOST=${XHOST} \
+			USE="${USE} -cxx -fortran -openmp -mudflap" \
+			emerge_host_pkgs --nodeps cross-${CHOST}/gcc || return 1
+	
+			CBUILD=${XHOST} \
+			emerge_target_pkgs --nodeps sys-kernel/linux-headers || return 1
+	
+			CBUILD=${XHOST} \
+			emerge_target_pkgs --nodeps sys-libs/glibc || return 1
+	
+			# Convince portage that we have a full glibc
+			rm -rf "${EPREFIX}"/tmp/var/db/pkg/cross-${CHOST}/glibc-*
+			cp -R "${EPREFIX}"/var/db/pkg/sys-libs/glibc-* "${EPREFIX}"/tmp/var/db/pkg/cross-${CHOST}
+	
+			grep cxx "${EPREFIX}"/tmp/var/db/pkg/cross-${CHOST}/gcc-*/USE >/dev/null || \
+			TPREFIX="${EPREFIX}" \
+			EPREFIX="${EPREFIX}"/tmp \
+			CTARGET=${CHOST} \
+			CHOST=${XHOST} \
+			emerge --oneshot --nodeps cross-${CHOST}/gcc || return 1
+		else
+			error This script currently only supports RAP.
+			exit 1
 		fi
-
-		local pkgs=(
-			sys-apps/baselayout-prefix
-			app-arch/xz-utils
-			sys-devel/m4
-			sys-devel/flex
-			sys-devel/bison
-			sys-devel/binutils-config
-			sys-devel/gcc-config
-		)
-		emerge_host_pkgs --nodeps "${pkgs[@]}" || return 1
-
-		local pkgs=(
-			dev-libs/gmp
-			dev-libs/mpfr
-			dev-libs/mpc
-		)
-		USE="${USE} static-libs -cxx" \
-		EXTRA_ECONF=--disable-shared \
-		emerge_host_pkgs --nodeps "${pkgs[@]}" || return 1
-
-		# we need perl to install linux-headers, but we prefer not to temporarily build
-		# the entire dependency tree here if the host already has a serviceable one.
-		type -P perl > /dev/null || emerge_host_pkgs dev-lang/perl || return 1
-
-		CTARGET=${CHOST} \
-		CHOST=${XHOST} \
-		emerge_host_pkgs --nodeps cross-${CHOST}/linux-headers || return 1
-
-		CTARGET=${CHOST} \
-		CHOST=${XHOST} \
-		USE="${USE} crosscompile_opts_headers-only" \
-		emerge_host_pkgs --nodeps cross-${CHOST}/glibc || return 1
-
-		TPREFIX="${EPREFIX}" \
-		CTARGET=${CHOST} \
-		CHOST=${XHOST} \
-		USE="${USE} -cxx -nls -zlib" \
-		emerge_host_pkgs --nodeps cross-${CHOST}/binutils || return 1
-
-		TPREFIX="${EPREFIX}" \
-		EXTRA_ECONF="--with-sysroot=${EPREFIX}/tmp/usr/${CHOST}" \
-		CTARGET=${CHOST} \
-		CHOST=${XHOST} \
-		USE="${USE} -cxx -fortran -openmp -mudflap" \
-		emerge_host_pkgs --nodeps cross-${CHOST}/gcc || return 1
-
-		CBUILD=${XHOST} \
-		emerge_target_pkgs --nodeps sys-kernel/linux-headers || return 1
-
-		CBUILD=${XHOST} \
-		emerge_target_pkgs --nodeps sys-libs/glibc || return 1
-
-		# Convince portage that we have a full glibc
-		rm -rf "${EPREFIX}"/tmp/var/db/pkg/cross-${CHOST}/glibc-*
-		cp -R "${EPREFIX}"/var/db/pkg/sys-libs/glibc-* "${EPREFIX}"/tmp/var/db/pkg/cross-${CHOST}
-
-		grep cxx "${EPREFIX}"/tmp/var/db/pkg/cross-${CHOST}/gcc-*/USE >/dev/null || \
-		TPREFIX="${EPREFIX}" \
-		EPREFIX="${EPREFIX}"/tmp \
-		CTARGET=${CHOST} \
-		CHOST=${XHOST} \
-		emerge --oneshot --nodeps cross-${CHOST}/gcc || return 1
-	else
-		error This script currently only supports RAP.
-		exit 1
 	fi
 
 	export EPREFIX
@@ -1181,41 +1179,15 @@ bootstrap_stage3() {
 	)
 	emerge_pkgs "" "${pkgs[@]}" || return 1
 
-	exit 1
-
 	if [[ -d ${ROOT}/tmp/var/tmp ]] ; then
 		rm -Rf "${ROOT}"/tmp || return 1
 		mkdir -p "${ROOT}"/tmp || return 1
 	fi
-	# note to myself: the tree MUST be synced at least once, or we'll
-	# carry on the polluted profile!
-	treedate=$(date -f "${ROOT}"/usr/portage/metadata/timestamp +%s)
-	nowdate=$(date +%s)
-	[[ $(< ${ROOT}/etc/portage/make.profile/make.defaults) != *"PORTAGE_SYNC_STALE"* && $((nowdate - (60 * 60 * 24))) -lt ${treedate} ]] || emerge --sync || emerge-webrsync || return 1
 
-	# activate last compiler (some Solaris cases), needed for mpc and
-	# deps below
-	gcc-config $(gcc-config -l | wc -l)
+	emerge --sync || emerge-webrsync || return 1
 
-	local cpuflags=
-	case ${bootstrapCHOST} in
-		*-darwin*)
-			: # gcc-apple is 4.2, so mpfr/mpc/gmp are not necessary
-			;;
-		*)
-			emerge_pkgs "" "<dev-libs/mpc-0.9" || return 1
-			;;
-	esac
-
-	# Portage should figure out itself what it needs to do, if anything
-	USE=-git emerge -u system || return 1
-
-	# activate last compiler
-	gcc-config $(gcc-config -l | wc -l)
-
-	# remove anything that we don't need (compilers most likely)
-	emerge --depclean
-
+	# HACK
+	rm -f "${EPREFIX}/etc/portage/make.conf"
 	if [[ ! -f ${EPREFIX}/etc/portage/make.conf ]] ; then
 		{
 			echo 'USE="unicode nls"'
@@ -1225,6 +1197,8 @@ bootstrap_stage3() {
 			echo "# be careful with this one, don't just remove it!"
 			echo "PREFIX_DISABLE_GEN_USR_LDSCRIPT=yes"
 		} > "${EPREFIX}"/etc/portage/make.conf
+
+		echo "PORTDIR_OVERLAY=\"${PORTDIR_RAP}\"" >> ${ROOT}/etc/portage/make.conf
 	fi
 
 	einfo "stage3 successfully finished"
