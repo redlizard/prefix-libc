@@ -19,7 +19,7 @@ LIBPERL="libperl$(get_libname ${PERLSLOT}.${SHORT_PV})"
 LICENSE="|| ( Artistic GPL-1 GPL-2 GPL-3 )"
 SLOT="0"
 KEYWORDS="alpha amd64 arm hppa ia64 m68k ~mips ppc ppc64 s390 sh sparc x86 ~sparc-fbsd ~x86-fbsd"
-IUSE="berkdb debug doc gdbm ithreads perlsuid build elibc_FreeBSD"
+IUSE="berkdb debug doc gdbm ithreads perlsuid build elibc_FreeBSD rap"
 PERL_OLDVERSEN="5.8.0 5.8.2 5.8.4 5.8.5 5.8.6 5.8.7"
 
 DEPEND="berkdb? ( sys-libs/db )
