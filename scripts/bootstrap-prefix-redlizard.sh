@@ -1161,6 +1161,10 @@ bootstrap_stage3() {
 	CBUILD=${XHOST} \
 	emerge_pkgs --nodeps "${pkgs[@]}" || return 1
 
+	# Cross-compiled bash is badly broken, so we need to rebuild it natively.
+	[[ $(cat "${EPREFIX}"/var/db/pkg/app-shells/bash-*/CBUILD) != $(cat "${EPREFIX}"/var/db/pkg/app-shells/bash-*/CHOST) ]] && \
+	emerge --oneshot app-shells/bash
+
 	# we need pax-utils this early for OSX (before libiconv - gen_usr_ldscript)
 	# but also for perl, which uses scanelf/scanmacho to find compatible
 	# lib-dirs
