@@ -1064,6 +1064,8 @@ bootstrap_stage3() {
 				mkdir -p "${EPREFIX}"/tmp/cross-overlay
 				mkdir -p "${EPREFIX}"/tmp/cross-overlay/profiles
 				echo cross_overlay > "${EPREFIX}"/tmp/cross-overlay/profiles/repo_name
+				mkdir -p "${EPREFIX}"/tmp/cross-overlay/metadata
+				cp "${PORTDIR_RAP}"/metadata/layout.conf "${EPREFIX}"/tmp/cross-overlay/metadata
 				mkdir -p "${EPREFIX}"/tmp/cross-overlay/cross-"${CHOST}"
 				cp -r "${PORTDIR_RAP}"/{sys-devel/binutils,sys-devel/gcc,sys-libs/glibc} "${PORTDIR}"/sys-kernel/linux-headers "${EPREFIX}"/tmp/cross-overlay/cross-"${CHOST}"
 				cp -r "${PORTDIR_RAP}"/eclass "${EPREFIX}/tmp/cross-overlay"
