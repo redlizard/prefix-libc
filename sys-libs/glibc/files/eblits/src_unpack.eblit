@@ -147,6 +147,13 @@ toolchain-glibc_src_unpack() {
 		fi
 	fi
 
+	# Prefix: have system() use ${EPREFIX}/bin/sh instead of /bin/sh.
+	if use prefix ; then
+		find -name '*.c' -o -name '*.h' | while read file; do
+			sed -i "s@\"/bin/sh\"@\"${EPREFIX}/bin/sh\"@g" "$file"
+		done
+	fi
+
 	epatch_user
 
 	gnuconfig_update
