@@ -1180,6 +1180,9 @@ bootstrap_stage3() {
 	CBUILD=${XHOST} \
 	emerge_pkgs --nodeps "${pkgs[@]}" || return 1
 
+	# HACK: This should be in portage.
+	[[ -e ${EPREFIX}/usr/sbin/ldconfig ]] && "${EPREFIX}"/usr/sbin/ldconfig
+
 	# Cross-compiled bash is badly broken, so we need to rebuild it natively.
 	[[ $(cat "${EPREFIX}"/var/db/pkg/app-shells/bash-*/CBUILD) != $(cat "${EPREFIX}"/var/db/pkg/app-shells/bash-*/CHOST) ]] && \
 	emerge --oneshot app-shells/bash
