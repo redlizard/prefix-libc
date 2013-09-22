@@ -65,6 +65,10 @@ efetch() {
 	return 0
 }
 
+use() {
+	USE="" portageq envvar USE | grep -q "\w$1\w"
+}
+
 # template
 # bootstrap_() {
 # 	PV=
@@ -991,6 +995,21 @@ bootstrap_stage3() {
 		return 1
 	fi
 
+	# HACK
+	rm -f "${EPREFIX}/etc/portage/make.conf"
+	if [[ ! -f ${EPREFIX}/etc/portage/make.conf ]] ; then
+		{
+			echo 'USE="unicode nls"'
+			echo 'CFLAGS="${CFLAGS} -O2 -pipe"'
+			echo 'CXXFLAGS="${CFLAGS}"'
+			echo "MAKEOPTS=\"${MAKEOPTS}\""
+			echo "# be careful with this one, don't just remove it!"
+			echo "PREFIX_DISABLE_GEN_USR_LDSCRIPT=yes"
+		} > "${EPREFIX}"/etc/portage/make.conf
+
+		echo "PORTDIR_OVERLAY=\"${PORTDIR_RAP}\"" >> ${ROOT}/etc/portage/make.conf
+	fi
+
 	# No longer support gen_usr_ldscript stuff in new bootstraps, this
 	# must be in line with what eventually ends up in make.conf, see the
 	# end of this function.  We don't do this in bootstrap_setup()
@@ -1059,7 +1078,7 @@ bootstrap_stage3() {
 	emerge_target_pkgs --nodeps sys-apps/baselayout-prefix || return 1
 
 	if [[ ! -e ${EPREFIX}/usr/bin/emerge ]]; then
-		if "${EPREFIX}"/tmp/usr/bin/portageq envvar USE | grep -E '\Wrap\W' >/dev/null; then
+		if use rap; then
 			if ! [[ -e ${EPREFIX}/tmp/cross-overlay ]]; then
 				mkdir -p "${EPREFIX}"/tmp/cross-overlay
 				mkdir -p "${EPREFIX}"/tmp/cross-overlay/profiles
@@ -1181,9 +1200,13 @@ bootstrap_stage3() {
 		app-admin/eselect
 		dev-util/pkgconf
 		net-misc/wget
-		sys-apps/portage
 	)
 	emerge_pkgs "" "${pkgs[@]}" || return 1
+
+	# Break a dependency loop
+	use acl && use nls && emerge_pkgs "" sys-devel/gettext || return 1
+
+	emerge_pkgs "" sys-apps/portage || return 1
 
 	if [[ -d ${ROOT}/tmp/var/tmp ]] ; then
 		rm -Rf "${ROOT}"/tmp || return 1
@@ -1191,21 +1214,6 @@ bootstrap_stage3() {
 	fi
 
 	emerge --sync || emerge-webrsync || return 1
-
-	# HACK
-	rm -f "${EPREFIX}/etc/portage/make.conf"
-	if [[ ! -f ${EPREFIX}/etc/portage/make.conf ]] ; then
-		{
-			echo 'USE="unicode nls"'
-			echo 'CFLAGS="${CFLAGS} -O2 -pipe"'
-			echo 'CXXFLAGS="${CFLAGS}"'
-			echo "MAKEOPTS=\"${MAKEOPTS}\""
-			echo "# be careful with this one, don't just remove it!"
-			echo "PREFIX_DISABLE_GEN_USR_LDSCRIPT=yes"
-		} > "${EPREFIX}"/etc/portage/make.conf
-
-		echo "PORTDIR_OVERLAY=\"${PORTDIR_RAP}\"" >> ${ROOT}/etc/portage/make.conf
-	fi
 
 	einfo "stage3 successfully finished"
 }
