@@ -1,0 +1,16 @@
+diff -burN perl-5.16.1.orig/Makefile.SH perl-5.16.1/Makefile.SH
+--- perl-5.16.1.orig/Makefile.SH	2012-11-07 10:48:29.000000000 +0000
++++ perl-5.16.1/Makefile.SH	2012-11-07 10:48:12.000000000 +0000
+@@ -149,9 +149,9 @@
+ 		rm -f preload
+ 		cat <<'EOT' > preload
+ #! /bin/sh
+-lib=$1
++dir=`dirname $1`
+ shift
+-test -r $lib && export LD_PRELOAD="$lib $LD_PRELOAD"
++export LD_LIBRARY_PATH="$dir:$LD_LIBRARY_PATH"
+ exec "$@"
+ EOT
+ 		chmod 755 preload
+
