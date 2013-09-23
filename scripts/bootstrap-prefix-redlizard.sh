@@ -1214,6 +1214,7 @@ bootstrap_stage3() {
 	if [[ -d ${ROOT}/tmp/var/tmp ]] ; then
 		rm -Rf "${ROOT}"/tmp || return 1
 		mkdir -p "${ROOT}"/tmp || return 1
+		hash -r
 	fi
 
 	emerge --sync || emerge-webrsync || return 1
