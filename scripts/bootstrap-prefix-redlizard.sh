@@ -66,7 +66,7 @@ efetch() {
 }
 
 use() {
-	USE="" portageq envvar USE | grep -q "\w$1\w"
+	USE="" portageq envvar USE | grep -q "\\b$1\\b"
 }
 
 # template
