@@ -96,9 +96,13 @@ eblit-perl-src_configure() {
 			fi
 		done
 		myconf "-Dlibpth=${EPREFIX}/$(get_libdir) ${EPREFIX}/usr/$(get_libdir) ${paths}"
+		myconf "-Dplibpth=${EPREFIX}/$(get_libdir) ${EPREFIX}/usr/$(get_libdir) ${paths}"
+		myconf "-Dusrinc="${EPREFIX}/usr/include /usr/include"
 	elif [[ ${EPREFIX}/$(get_libdir) != "/lib" ]] ; then
 		# We need to use " and not ', as the written config.sh use ' ...
 		myconf "-Dlibpth=${EPREFIX}/usr/local/$(get_libdir) ${EPREFIX}/$(get_libdir) ${EPREFIX}/usr/$(get_libdir)"
+		myconf "-Dplibpth=${EPREFIX}/usr/local/$(get_libdir) ${EPREFIX}/$(get_libdir) ${EPREFIX}/usr/$(get_libdir)"
+		myconf "-Dusrinc=${EPREFIX}/usr/include"
 	fi
 
 	# don't try building ODBM, bug #354453
