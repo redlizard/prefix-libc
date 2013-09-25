@@ -329,6 +329,8 @@ HOSTCC='gcc -m64'
 		if ${rap}; then
 			echo "PORTDIR_OVERLAY=\"${PORTDIR_RAP}\"" >> ${ROOT}/etc/portage/make.conf
 			echo "
+dev-lang/perl::gentoo_prefix
+dev-lang/python::gentoo_prefix
 sys-devel/binutils-config::gentoo_prefix
 sys-devel/binutils::gentoo_prefix
 sys-devel/gcc-config::gentoo_prefix
