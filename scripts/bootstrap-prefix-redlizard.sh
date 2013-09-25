@@ -163,6 +163,16 @@ HOSTCC='gcc -m64'
 			profile="${PORTDIR}/profiles/prefix/linux/ia64"
 			ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib -Wl,-rpath=${ROOT}/usr/lib -L${ROOT}/lib -Wl,-rpath=${ROOT}/lib -L${ROOT}/tmp/usr/lib -Wl,-rpath=${ROOT}/tmp/usr/lib\""
 			;;
+		armv7a-hardfloat-linux-gnueabi)
+			profile="${PORTDIR_RAP}/profiles/default/linux/arm/13.0/armv7a/rap"
+			ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib64 -L${ROOT}/lib64 -L${ROOT}/tmp/usr/lib\""
+			rap=true
+			;;
+		armv5tel-softfloat-linux-gnueabi)
+			profile="${PORTDIR_RAP}/profiles/default/linux/arm/13.0/armv5te/rap"
+			ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib64 -L${ROOT}/lib64 -L${ROOT}/tmp/usr/lib\""
+			rap=true
+			;;
 		powerpc-unknown-linux-gnu)
 			profile="${PORTDIR}/profiles/prefix/linux/ppc"
 			ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib -Wl,-rpath=${ROOT}/usr/lib -L${ROOT}/lib -Wl,-rpath=${ROOT}/lib -L${ROOT}/tmp/usr/lib -Wl,-rpath=${ROOT}/tmp/usr/lib\""
@@ -170,11 +180,6 @@ HOSTCC='gcc -m64'
 		powerpc64-unknown-linux-gnu)
 			profile="${PORTDIR}/profiles/prefix/linux/ppc64"
 			ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib -Wl,-rpath=${ROOT}/usr/lib -L${ROOT}/lib -Wl,-rpath=${ROOT}/lib -L${ROOT}/tmp/usr/lib -Wl,-rpath=${ROOT}/tmp/usr/lib\""
-			;;
-		armv7l-pc-linux-gnu)
-			profile="${PORTDIR_RAP}/profiles/default/linux/amd64/13.0/rap"
-			ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib -L${ROOT}/lib -L${ROOT}/tmp/usr/lib\""
-			rap=true
 			;;
 		sparc-sun-solaris2.9)
 			profile="${PORTDIR}/profiles/prefix/sunos/solaris/5.9/sparc"
