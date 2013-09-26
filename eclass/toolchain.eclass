@@ -10,7 +10,7 @@ HOMEPAGE="http://gcc.gnu.org/"
 LICENSE="GPL-2 LGPL-2.1"
 RESTRICT="strip" # cross-compilers need controlled stripping
 
-inherit eutils versionator libtool toolchain-funcs flag-o-matic gnuconfig multilib fixheadtails pax-utils
+inherit eutils versionator libtool toolchain-funcs flag-o-matic gnuconfig multilib fixheadtails pax-utils prefix
 
 if [[ ${PV} == *_pre9999* ]] ; then
 	EGIT_REPO_URI="git://gcc.gnu.org/git/gcc.git"
@@ -43,6 +43,9 @@ fi
 is_crosscompile() {
 	[[ ${CHOST} != ${CTARGET} ]]
 }
+
+: ${ED:=${D}}
+: ${EROOT:=${ROOT}}
 
 # General purpose version check.  Without a second arg matches up to minor version (x.x.x)
 # (ie. 4.6.0_pre9999 matches 4 or 4.6 or 4.6.0 but not 4.6.1)
@@ -472,7 +475,7 @@ create_gcc_env_entry() {
 	local gcc_envd_base="/etc/env.d/gcc/${CTARGET}-${GCC_CONFIG_VER}"
 
 	local gcc_specs_file
-	local gcc_envd_file="${D}${gcc_envd_base}"
+	local gcc_envd_file="${ED}${gcc_envd_base}"
 	if [[ -z $1 ]] ; then
 		# I'm leaving the following commented out to remind me that it
 		# was an insanely -bad- idea. Stuff broke. GCC_SPECS isnt unset
@@ -481,7 +484,7 @@ create_gcc_env_entry() {
 		gcc_specs_file=""
 	else
 		gcc_envd_file+="-$1"
-		gcc_specs_file="${LIBPATH}/$1.specs"
+		gcc_specs_file="${EPREFIX}${LIBPATH}/$1.specs"
 	fi
 
 	# We want to list the default ABI's LIBPATH first so libtool
@@ -493,7 +496,7 @@ create_gcc_env_entry() {
 		local mdir mosdir abi ldpath
 		for abi in $(get_all_abis TARGET) ; do
 			mdir=$($(XGCC) $(get_abi_CFLAGS ${abi}) --print-multi-directory)
-			ldpath=${LIBPATH}
+			ldpath=${EPREFIX}${LIBPATH}
 			[[ ${mdir} != "." ]] && ldpath+="/${mdir}"
 			ldpaths="${ldpath}${ldpaths:+:${ldpaths}}"
 
@@ -502,17 +505,17 @@ create_gcc_env_entry() {
 		done
 	else
 		# Older gcc's didn't do multilib, so logic is simple.
-		ldpaths=${LIBPATH}
+		ldpaths=${EPREFIX}${LIBPATH}
 	fi
 
 	cat <<-EOF > ${gcc_envd_file}
-	PATH="${BINPATH}"
-	ROOTPATH="${BINPATH}"
-	GCC_PATH="${BINPATH}"
+	PATH="${EPREFIX}${BINPATH}"
+	ROOTPATH="${EPREFIX}${BINPATH}"
+	GCC_PATH="${EPREFIX}${BINPATH}"
 	LDPATH="${ldpaths}"
-	MANPATH="${DATAPATH}/man"
-	INFOPATH="${DATAPATH}/info"
-	STDCXX_INCDIR="${STDCXX_INCDIR##*/}"
+	MANPATH="${EPREFIX}${DATAPATH}/man"
+	INFOPATH="${EPREFIX}${DATAPATH}/info"
+	STDCXX_INCDIR="${EPREFIX}${STDCXX_INCDIR##*/}"
 	CTARGET="${CTARGET}"
 	GCC_SPECS="${gcc_specs_file}"
 	MULTIOSDIRS="${mosdirs}"
@@ -596,20 +599,20 @@ toolchain_pkg_postinst() {
 		echo
 
 		# Clean up old paths
-		rm -f "${ROOT}"/*/rcscripts/awk/fixlafiles.awk "${ROOT}"/sbin/fix_libtool_files.sh
-		rmdir "${ROOT}"/*/rcscripts{/awk,} 2>/dev/null
+		rm -f "${EROOT}"/*/rcscripts/awk/fixlafiles.awk "${EROOT}"/sbin/fix_libtool_files.sh
+		rmdir "${EROOT}"/*/rcscripts{/awk,} 2>/dev/null
 
-		mkdir -p "${ROOT}"/usr/{share/gcc-data,sbin,bin}
-		cp "${ROOT}/${DATAPATH}"/fixlafiles.awk "${ROOT}"/usr/share/gcc-data/ || die
-		cp "${ROOT}/${DATAPATH}"/fix_libtool_files.sh "${ROOT}"/usr/sbin/ || die
+		mkdir -p "${EROOT}"/usr/{share/gcc-data,sbin,bin}
+		cp "${EROOT}/${DATAPATH}"/fixlafiles.awk "${EROOT}"/usr/share/gcc-data/ || die
+		cp "${EROOT}/${DATAPATH}"/fix_libtool_files.sh "${EROOT}"/usr/sbin/ || die
 
 		# Since these aren't critical files and portage sucks with
 		# handling of binpkgs, don't require these to be found
-		cp "${ROOT}/${DATAPATH}"/c{89,99} "${ROOT}"/usr/bin/ 2>/dev/null
+		cp "${EROOT}/${DATAPATH}"/c{89,99} "${EROOT}"/usr/bin/ 2>/dev/null
 	fi
 
 	if use regression-test ; then
-		elog "Testsuite results have been installed into /usr/share/doc/${PF}/testsuite"
+		elog "Testsuite results have been installed into ${EPREFIX}/usr/share/doc/${PF}/testsuite"
 		echo
 	fi
 }
@@ -622,10 +625,10 @@ toolchain_pkg_postrm() {
 
 	# clean up the cruft left behind by cross-compilers
 	if is_crosscompile ; then
-		if [[ -z $(ls "${ROOT}"/etc/env.d/gcc/${CTARGET}* 2>/dev/null) ]] ; then
-			rm -f "${ROOT}"/etc/env.d/gcc/config-${CTARGET}
-			rm -f "${ROOT}"/etc/env.d/??gcc-${CTARGET}
-			rm -f "${ROOT}"/usr/bin/${CTARGET}-{gcc,{g,c}++}{,32,64}
+		if [[ -z $(ls "${EROOT}"/etc/env.d/gcc/${CTARGET}* 2>/dev/null) ]] ; then
+			rm -f "${EROOT}"/etc/env.d/gcc/config-${CTARGET}
+			rm -f "${EROOT}"/etc/env.d/??gcc-${CTARGET}
+			rm -f "${EROOT}"/usr/bin/${CTARGET}-{gcc,{g,c}++}{,32,64}
 		fi
 		return 0
 	fi
@@ -633,15 +636,15 @@ toolchain_pkg_postrm() {
 	# ROOT isnt handled by the script
 	[[ ${ROOT} != "/" ]] && return 0
 
-	if [[ ! -e ${LIBPATH}/libstdc++.so ]] ; then
+	if [[ ! -e ${EPREFIX}${LIBPATH}/libstdc++.so ]] ; then
 		# make sure the profile is sane during same-slot upgrade #289403
 		do_gcc_config
 
 		einfo "Running 'fix_libtool_files.sh ${GCC_RELEASE_VER}'"
-		/usr/sbin/fix_libtool_files.sh ${GCC_RELEASE_VER}
+		"${EPREFIX}"/usr/sbin/fix_libtool_files.sh ${GCC_RELEASE_VER}
 		if [[ -n ${BRANCH_UPDATE} ]] ; then
 			einfo "Running 'fix_libtool_files.sh ${GCC_RELEASE_VER}-${BRANCH_UPDATE}'"
-			/usr/sbin/fix_libtool_files.sh ${GCC_RELEASE_VER}-${BRANCH_UPDATE}
+			"${EPREFIX}"/usr/sbin/fix_libtool_files.sh ${GCC_RELEASE_VER}-${BRANCH_UPDATE}
 		fi
 	fi
 
@@ -1051,13 +1054,13 @@ gcc-compiler-configure() {
 gcc_do_configure() {
 	local confgcc=(
 		# Set configuration based on path variables
-		--prefix="${PREFIX}"
-		--bindir="${BINPATH}"
-		--includedir="${INCLUDEPATH}"
-		--datadir="${DATAPATH}"
-		--mandir="${DATAPATH}/man"
-		--infodir="${DATAPATH}/info"
-		--with-gxx-include-dir="${STDCXX_INCDIR}"
+		--prefix="${EPREFIX}${PREFIX}"
+		--bindir="${EPREFIX}${BINPATH}"
+		--includedir="${EPREFIX}${INCLUDEPATH}"
+		--datadir="${EPREFIX}${DATAPATH}"
+		--mandir="${EPREFIX}${DATAPATH}/man"
+		--infodir="${EPREFIX}${DATAPATH}/info"
+		--with-gxx-include-dir="${EPREFIX}${STDCXX_INCDIR}"
 	)
 	# On Darwin we need libdir to be set in order to get correct install names
 	# for things like libobjc-gnu, libgcj and libfortran.  If we enable it on
@@ -1095,7 +1098,7 @@ gcc_do_configure() {
 	elif tc_version_is_at_least 4.6 ; then
 		confgcc+=( $(use_with graphite cloog) )
 		confgcc+=( $(use_with graphite ppl) )
-		use graphite && confgcc+=( --with-cloog-include=/usr/include/cloog-ppl )
+		use graphite && confgcc+=( --with-cloog-include="${EPREFIX}"/usr/include/cloog-ppl )
 		use graphite && confgcc+=( --disable-ppl-version-check )
 	elif tc_version_is_at_least 4.4 ; then
 		confgcc+=( --without-cloog )
@@ -1175,10 +1178,10 @@ gcc_do_configure() {
 			elif built_with_use --hidden --missing false ${CATEGORY}/${needed_libc} crosscompile_opts_headers-only ; then
 				confgcc+=(
 					"${confgcc_no_libc[@]}"
-					--with-sysroot=${PREFIX}/${CTARGET}
+					--with-sysroot="${EPREFIX}"${PREFIX}/${CTARGET}
 				)
 			else
-				confgcc+=( --with-sysroot=${PREFIX}/${CTARGET} )
+				confgcc+=( --with-sysroot="${EPREFIX}"${PREFIX}/${CTARGET} )
 			fi
 		fi
 
@@ -1259,11 +1262,11 @@ gcc_do_configure() {
 
 	# Nothing wrong with a good dose of verbosity
 	echo
-	einfo "PREFIX:			${PREFIX}"
-	einfo "BINPATH:			${BINPATH}"
-	einfo "LIBPATH:			${LIBPATH}"
-	einfo "DATAPATH:		${DATAPATH}"
-	einfo "STDCXX_INCDIR:	${STDCXX_INCDIR}"
+	einfo "PREFIX:			${EPREFIX}${PREFIX}"
+	einfo "BINPATH:			${EPREFIX}${BINPATH}"
+	einfo "LIBPATH:			${EPREFIX}${LIBPATH}"
+	einfo "DATAPATH:		${EPREFIX}${DATAPATH}"
+	einfo "STDCXX_INCDIR:	${EPREFIX}${STDCXX_INCDIR}"
 	echo
 	einfo "Configuring GCC with: ${confgcc[@]//--/\n\t--}"
 	echo
@@ -1356,7 +1359,7 @@ gcc_do_make() {
 	emake \
 		LDFLAGS="${LDFLAGS}" \
 		STAGE1_CFLAGS="${STAGE1_CFLAGS}" \
-		LIBPATH="${LIBPATH}" \
+		LIBPATH="${EPREFIX}${LIBPATH}" \
 		BOOT_CFLAGS="${BOOT_CFLAGS}" \
 		${GCC_MAKE_TARGET} \
 		|| die "emake failed with ${GCC_MAKE_TARGET}"
@@ -1502,7 +1505,7 @@ toolchain_src_compile() {
 	touch "${S}"/gcc/c-gperf.h
 
 	# Do not make manpages if we do not have perl ...
-	[[ ! -x /usr/bin/perl ]] \
+	[[ ! -x ${EPREFIX}/usr/bin/perl ]] \
 		&& find "${WORKDIR}"/build -name '*.[17]' | xargs touch
 
 	einfo "Compiling ${PN} ..."
@@ -1545,9 +1548,9 @@ toolchain_src_install() {
 	S="${WORKDIR}"/build emake -j1 DESTDIR="${D}" install || die
 
 	# Punt some tools which are really only useful while building gcc
-	find "${D}" -name install-tools -prune -type d -exec rm -rf "{}" \;
+	find "${ED}" -name install-tools -prune -type d -exec rm -rf "{}" \;
 	# This one comes with binutils
-	find "${D}" -name libiberty.a -delete
+	find "${ED}" -name libiberty.a -delete
 
 	# Move the libraries to the proper location
 	gcc_movelibs
@@ -1556,7 +1559,7 @@ toolchain_src_install() {
 	if ! is_crosscompile ; then
 		local EXEEXT
 		eval $(grep ^EXEEXT= "${WORKDIR}"/build/gcc/config.log)
-		[[ -r ${D}${BINPATH}/gcc${EXEEXT} ]] || die "gcc not found in ${D}"
+		[[ -r ${ED}${BINPATH}/gcc${EXEEXT} ]] || die "gcc not found in ${ED}"
 	fi
 
 	dodir /etc/env.d/gcc
@@ -1570,7 +1573,7 @@ toolchain_src_install() {
 	gcc_slot_java
 
 	dodir /usr/bin
-	cd "${D}"${BINPATH}
+	cd "${ED}"${BINPATH}
 	# Ugh: we really need to auto-detect this list.
 	#      It's constantly out of date.
 	for x in cpp gcc g++ c++ gcov g77 gcj gcjh gfortran gccgo ; do
@@ -1596,34 +1599,34 @@ toolchain_src_install() {
 	done
 
 	# Now do the fun stripping stuff
-	env RESTRICT="" CHOST=${CHOST} prepstrip "${D}${BINPATH}"
-	env RESTRICT="" CHOST=${CTARGET} prepstrip "${D}${LIBPATH}"
+	env RESTRICT="" CHOST=${CHOST} prepstrip "${ED}${BINPATH}"
+	env RESTRICT="" CHOST=${CTARGET} prepstrip "${ED}${LIBPATH}"
 	# gcc used to install helper binaries in lib/ but then moved to libexec/
-	[[ -d ${D}${PREFIX}/libexec/gcc ]] && \
-		env RESTRICT="" CHOST=${CHOST} prepstrip "${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}"
+	[[ -d ${ED}${PREFIX}/libexec/gcc ]] && \
+		env RESTRICT="" CHOST=${CHOST} prepstrip "${ED}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}"
 
 	cd "${S}"
 	if is_crosscompile; then
-		rm -rf "${D}"/usr/share/{man,info}
-		rm -rf "${D}"${DATAPATH}/{man,info}
+		rm -rf "${ED}"/usr/share/{man,info}
+		rm -rf "${ED}"${DATAPATH}/{man,info}
 	else
 		if tc_version_is_at_least 3.0 ; then
 			local cxx_mandir=$(find "${WORKDIR}/build/${CTARGET}/libstdc++-v3" -name man)
 			if [[ -d ${cxx_mandir} ]] ; then
 				# clean bogus manpages #113902
 				find "${cxx_mandir}" -name '*_build_*' -exec rm {} \;
-				cp -r "${cxx_mandir}"/man? "${D}/${DATAPATH}"/man/
+				cp -r "${cxx_mandir}"/man? "${ED}/${DATAPATH}"/man/
 			fi
 		fi
 		has noinfo ${FEATURES} \
-			&& rm -r "${D}/${DATAPATH}"/info \
+			&& rm -r "${ED}/${DATAPATH}"/info \
 			|| prepinfo "${DATAPATH}"
 		has noman ${FEATURES} \
-			&& rm -r "${D}/${DATAPATH}"/man \
+			&& rm -r "${ED}/${DATAPATH}"/man \
 			|| prepman "${DATAPATH}"
 	fi
 	# prune empty dirs left behind
-	find "${D}" -depth -type d -delete 2>/dev/null
+	find "${ED}" -depth -type d -delete 2>/dev/null
 
 	# install testsuite results
 	if use regression-test; then
@@ -1636,30 +1639,38 @@ toolchain_src_install() {
 	# Rather install the script, else portage with changing $FILESDIR
 	# between binary and source package borks things ....
 	if ! is_crosscompile ; then
+		cp "${GCC_FILESDIR}"/fix_libtool_files.sh "${T}"
+		cp "${GCC_FILESDIR}"/awk/fixlafiles.awk-no_gcc_la "${T}"
+		cp "${GCC_FILESDIR}"/awk/fixlafiles.awk "${T}"
+		eprefixify \
+			"${T}"/fix_libtool_files.sh \
+			"${T}"/fixlafiles.awk-no_gcc_la \
+			"${T}"/fixlafiles.awk
+
 		insinto "${DATAPATH}"
 		if tc_version_is_at_least 4.0 ; then
-			newins "${GCC_FILESDIR}"/awk/fixlafiles.awk-no_gcc_la fixlafiles.awk || die
-			find "${D}/${LIBPATH}" -name libstdc++.la -type f -exec rm "{}" \;
+			newins "${T}"/fixlafiles.awk-no_gcc_la fixlafiles.awk || die
+			find "${ED}/${LIBPATH}" -name libstdc++.la -type f -exec rm "{}" \;
 		else
-			doins "${GCC_FILESDIR}"/awk/fixlafiles.awk || die
+			doins "${T}"/fixlafiles.awk || die
 		fi
 		exeinto "${DATAPATH}"
-		doexe "${GCC_FILESDIR}"/fix_libtool_files.sh || die
+		doexe "${T}"/fix_libtool_files.sh || die
 		doexe "${GCC_FILESDIR}"/c{89,99} || die
 	fi
 
 	# Use gid of 0 because some stupid ports don't have
 	# the group 'root' set to gid 0.  Send to /dev/null
 	# for people who are testing as non-root.
-	chown -R root:0 "${D}"${LIBPATH} 2>/dev/null
+	chown -R ${PORTAGE_INST_UID:-0}:${PORTAGE_INST_GID:-0} "${ED}"${LIBPATH} 2>/dev/null
 
 	# Move pretty-printers to gdb datadir to shut ldconfig up
 	local py gdbdir=/usr/share/gdb/auto-load${LIBPATH/\/lib\//\/$(get_libdir)\/}
-	pushd "${D}"${LIBPATH} >/dev/null
+	pushd "${ED}"${LIBPATH} >/dev/null
 	for py in $(find . -name '*-gdb.py') ; do
 		local multidir=${py%/*}
 		insinto "${gdbdir}/${multidir}"
-		sed -i "/^libdir =/s:=.*:= '${LIBPATH}/${multidir}':" "${py}" || die #348128
+		sed -i "/^libdir =/s:=.*:= '${EPREFIX}${LIBPATH}/${multidir}':" "${py}" || die #348128
 		doins "${py}" || die
 		rm "${py}" || die
 	done
@@ -1671,8 +1682,8 @@ toolchain_src_install() {
 
 	# Disable RANDMMAP so PCH works. #301299
 	if tc_version_is_at_least 4.3 ; then
-		pax-mark -r "${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}/cc1"
-		pax-mark -r "${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}/cc1plus"
+		pax-mark -r "${ED}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}/cc1"
+		pax-mark -r "${ED}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}/cc1plus"
 	fi
 }
 
@@ -1680,32 +1691,32 @@ gcc_slot_java() {
 	local x
 
 	# Move Java headers to compiler-specific dir
-	for x in "${D}"${PREFIX}/include/gc*.h "${D}"${PREFIX}/include/j*.h ; do
-		[[ -f ${x} ]] && mv -f "${x}" "${D}"${LIBPATH}/include/
+	for x in "${ED}"${PREFIX}/include/gc*.h "${ED}"${PREFIX}/include/j*.h ; do
+		[[ -f ${x} ]] && mv -f "${x}" "${ED}"${LIBPATH}/include/
 	done
 	for x in gcj gnu java javax org ; do
-		if [[ -d ${D}${PREFIX}/include/${x} ]] ; then
+		if [[ -d ${ED}${PREFIX}/include/${x} ]] ; then
 			dodir /${LIBPATH}/include/${x}
-			mv -f "${D}"${PREFIX}/include/${x}/* "${D}"${LIBPATH}/include/${x}/
-			rm -rf "${D}"${PREFIX}/include/${x}
+			mv -f "${ED}"${PREFIX}/include/${x}/* "${ED}"${LIBPATH}/include/${x}/
+			rm -rf "${ED}"${PREFIX}/include/${x}
 		fi
 	done
 
-	if [[ -d ${D}${PREFIX}/lib/security ]] || [[ -d ${D}${PREFIX}/$(get_libdir)/security ]] ; then
+	if [[ -d ${ED}${PREFIX}/lib/security ]] || [[ -d ${ED}${PREFIX}/$(get_libdir)/security ]] ; then
 		dodir /${LIBPATH}/security
-		mv -f "${D}"${PREFIX}/lib*/security/* "${D}"${LIBPATH}/security
-		rm -rf "${D}"${PREFIX}/lib*/security
+		mv -f "${ED}"${PREFIX}/lib*/security/* "${ED}"${LIBPATH}/security
+		rm -rf "${ED}"${PREFIX}/lib*/security
 	fi
 
 	# Move random gcj files to compiler-specific directories
 	for x in libgcj.spec logging.properties ; do
-		x="${D}${PREFIX}/lib/${x}"
-		[[ -f ${x} ]] && mv -f "${x}" "${D}"${LIBPATH}/
+		x="${ED}${PREFIX}/lib/${x}"
+		[[ -f ${x} ]] && mv -f "${x}" "${ED}"${LIBPATH}/
 	done
 
 	# Rename jar because it could clash with Kaffe's jar if this gcc is
 	# primary compiler (aka don't have the -<version> extension)
-	cd "${D}"${BINPATH}
+	cd "${ED}"${BINPATH}
 	[[ -f jar ]] && mv -f jar gcj-jar
 }
 
@@ -1723,7 +1734,7 @@ gcc_movelibs() {
 
 		local OS_MULTIDIR=$($(XGCC) ${multiarg} --print-multi-os-directory)
 		local MULTIDIR=$($(XGCC) ${multiarg} --print-multi-directory)
-		local TODIR=${D}${LIBPATH}/${MULTIDIR}
+		local TODIR=${ED}${LIBPATH}/${MULTIDIR}
 		local FROMDIR=
 
 		[[ -d ${TODIR} ]] || mkdir -p ${TODIR}
@@ -1735,7 +1746,7 @@ gcc_movelibs() {
 			${PREFIX}/${CTARGET}/lib/${OS_MULTIDIR}
 		do
 			removedirs="${removedirs} ${FROMDIR}"
-			FROMDIR=${D}${FROMDIR}
+			FROMDIR=${ED}${FROMDIR}
 			if [[ ${FROMDIR} != "${TODIR}" && -d ${FROMDIR} ]] ; then
 				local files=$(find "${FROMDIR}" -maxdepth 1 ! -type d 2>/dev/null)
 				if [[ -n ${files} ]] ; then
@@ -1743,14 +1754,14 @@ gcc_movelibs() {
 				fi
 			fi
 		done
-		fix_libtool_libdir_paths "${LIBPATH}/${MULTIDIR}"
+		fix_libtool_libdir_paths "${EPREFIX}${LIBPATH}/${MULTIDIR}"
 
 		# SLOT up libgcj.pc if it's available (and let gcc-config worry about links)
 		FROMDIR="${PREFIX}/lib/${OS_MULTIDIR}"
-		for x in "${D}${FROMDIR}"/pkgconfig/libgcj*.pc ; do
+		for x in "${ED}${FROMDIR}"/pkgconfig/libgcj*.pc ; do
 			[[ -f ${x} ]] || continue
 			sed -i "/^libdir=/s:=.*:=${LIBPATH}/${MULTIDIR}:" "${x}"
-			mv "${x}" "${D}${FROMDIR}"/pkgconfig/libgcj-${GCC_PV}.pc || die
+			mv "${x}" "${ED}${FROMDIR}"/pkgconfig/libgcj-${GCC_PV}.pc || die
 		done
 	done
 
@@ -1759,9 +1770,9 @@ gcc_movelibs() {
 	#	rmdir SRC/lib/../lib/
 	#	mv SRC/lib/../lib32/*.o DEST  # Bork
 	for FROMDIR in ${removedirs} ; do
-		rmdir "${D}"${FROMDIR} >& /dev/null
+		rmdir "${ED}"${FROMDIR} >& /dev/null
 	done
-	find "${D}" -type d | xargs rmdir >& /dev/null
+	find "${ED}" -type d | xargs rmdir >& /dev/null
 }
 #----<< src_* >>----
 
@@ -1915,7 +1926,7 @@ should_we_gcc_config() {
 			einfo "following:"
 			echo
 			einfo "gcc-config ${CTARGET}-${GCC_CONFIG_VER}"
-			einfo "source /etc/profile"
+			einfo "source ${EPREFIX}/etc/profile"
 			echo
 		fi
 		return 1
@@ -1937,7 +1948,7 @@ do_gcc_config() {
 		[[ -n ${current_specs} ]] && use_specs=-${current_specs}
 	fi
 	if [[ -n ${use_specs} ]] && \
-	   [[ ! -e ${ROOT}/etc/env.d/gcc/${CTARGET}-${GCC_CONFIG_VER}${use_specs} ]]
+	   [[ ! -e ${EROOT}/etc/env.d/gcc/${CTARGET}-${GCC_CONFIG_VER}${use_specs} ]]
 	then
 		ewarn "The currently selected specs-specific gcc config,"
 		ewarn "${current_specs}, doesn't exist anymore. This is usually"
@@ -2035,7 +2046,7 @@ fix_libtool_libdir_paths() {
 		-e "/^libdir=/s:=.*:='${dir}':" \
 		./${dir}/*.la
 	sed -i \
-		-e "/^dependency_libs=/s:/[^ ]*/${allarchives}:${LIBPATH}/\1:g" \
+		-e "/^dependency_libs=/s:/[^ ]*/${allarchives}:${EPREFIX}${LIBPATH}/\1:g" \
 		$(find ./${PREFIX}/lib* -maxdepth 3 -name '*.la') \
 		./${dir}/*.la
 
