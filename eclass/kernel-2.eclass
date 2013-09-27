@@ -93,6 +93,11 @@ if [[ ${CTARGET} == ${CHOST} && ${CATEGORY/cross-} != ${CATEGORY} ]]; then
 	export CTARGET=${CATEGORY/cross-}
 fi
 
+: ${ED:=${D}}
+: ${EROOT:=${ROOT}}
+
+TPREFIX="$([[ ${CHOST} != ${CTARGET} ]] && echo "${TPREFIX}" || echo "${EPREFIX}")"
+
 HOMEPAGE="http://www.kernel.org/ http://www.gentoo.org/ ${HOMEPAGE}"
 : ${LICENSE:="GPL-2"}
 
@@ -515,7 +520,7 @@ fi
 kernel_header_destdir() {
 	[[ ${CTARGET} == ${CHOST} ]] \
 		&& echo /usr/include \
-		|| echo /usr/${CTARGET}/usr/include
+		|| echo /usr/${CTARGET}"${TPREFIX}"/usr/include
 }
 
 cross_pre_c_headers() {
@@ -642,7 +647,7 @@ compile_headers() {
 
 		# autoconf.h isnt generated unless it already exists. plus, we have
 		# no guarantee that any headers are installed on the system...
-		[[ -f ${ROOT}/usr/include/linux/autoconf.h ]] \
+		[[ -f ${EROOT}/usr/include/linux/autoconf.h ]] \
 			|| touch include/linux/autoconf.h
 
 		# if K_DEFCONFIG isn't set, force to "defconfig"
@@ -694,7 +699,7 @@ compile_headers_tweak_config() {
 install_universal() {
 	# Fix silly permissions in tarball
 	cd "${WORKDIR}"
-	chown -R 0:0 * >& /dev/null
+	chown -R ${PORTAGE_INST_UID:-0}:${PORTAGE_INST_GID:-0} * >& /dev/null
 	chmod -R a+r-w+X,u+w *
 	cd ${OLDPWD}
 }
@@ -706,10 +711,10 @@ install_headers() {
 	# of this crap anymore :D
 	if kernel_is ge 2 6 18 ; then
 		env_setup_xmakeopts
-		emake headers_install INSTALL_HDR_PATH="${D}"/${ddir}/.. ${xmakeopts} || die
+		emake headers_install INSTALL_HDR_PATH="${ED}"/${ddir}/.. ${xmakeopts} || die
 
 		# let other packages install some of these headers
-		rm -rf "${D}"/${ddir}/scsi  #glibc/uclibc/etc...
+		rm -rf "${ED}"/${ddir}/scsi  #glibc/uclibc/etc...
 		return 0
 	fi
 
@@ -717,19 +722,19 @@ install_headers() {
 	# $S values where the cmdline to cp is too long
 	pushd "${S}" >/dev/null
 	dodir ${ddir}/linux
-	cp -pPR "${S}"/include/linux "${D}"/${ddir}/ || die
-	rm -rf "${D}"/${ddir}/linux/modules
+	cp -pPR "${S}"/include/linux "${ED}"/${ddir}/ || die
+	rm -rf "${ED}"/${ddir}/linux/modules
 
 	dodir ${ddir}/asm
-	cp -pPR "${S}"/include/asm/* "${D}"/${ddir}/asm
+	cp -pPR "${S}"/include/asm/* "${ED}"/${ddir}/asm
 
 	if kernel_is 2 6 ; then
 		dodir ${ddir}/asm-generic
-		cp -pPR "${S}"/include/asm-generic/* "${D}"/${ddir}/asm-generic
+		cp -pPR "${S}"/include/asm-generic/* "${ED}"/${ddir}/asm-generic
 	fi
 
 	# clean up
-	find "${D}" -name '*.orig' -exec rm -f {} \;
+	find "${ED}" -name '*.orig' -exec rm -f {} \;
 
 	popd >/dev/null
 }
@@ -759,7 +764,7 @@ install_sources() {
 			> "${S}"/patches.txt
 	fi
 
-	mv ${WORKDIR}/linux* "${D}"/usr/src
+	mv ${WORKDIR}/linux* "${ED}"/usr/src
 
 	if [[ -n "${UNIPATCH_DOCS}" ]] ; then
 		for i in ${UNIPATCH_DOCS}; do
@@ -772,8 +777,8 @@ install_sources() {
 #==============================================================
 preinst_headers() {
 	local ddir=$(kernel_header_destdir)
-	[[ -L ${ddir}/linux ]] && rm ${ddir}/linux
-	[[ -L ${ddir}/asm ]] && rm ${ddir}/asm
+	[[ -L ${EPREFIX}${ddir}/linux ]] && rm "${EPREFIX}${ddir}"/linux
+	[[ -L ${EPREFIX}${ddir}/asm ]] && rm "${EPREFIX}${ddir}"/asm
 }
 
 # pkg_postinst functions
@@ -791,21 +796,21 @@ postinst_sources() {
 
 	# if we are to forcably symlink, delete it if it already exists first.
 	if [[ ${K_SYMLINK} > 0 ]]; then
-		[[ -h ${ROOT}usr/src/linux ]] && rm ${ROOT}usr/src/linux
+		[[ -h ${EROOT}usr/src/linux ]] && rm ${EROOT}usr/src/linux
 		MAKELINK=1
 	fi
 
 	# if the link doesnt exist, lets create it
-	[[ ! -h ${ROOT}usr/src/linux ]] && MAKELINK=1
+	[[ ! -h ${EROOT}usr/src/linux ]] && MAKELINK=1
 
 	if [[ ${MAKELINK} == 1 ]]; then
-		cd "${ROOT}"usr/src
+		cd "${EROOT}"usr/src
 		ln -sf linux-${KV_FULL} linux
 		cd ${OLDPWD}
 	fi
 
 	# Don't forget to make directory for sysfs
-	[[ ! -d ${ROOT}sys ]] && kernel_is 2 6 && mkdir ${ROOT}sys
+	[[ ! -d ${EROOT}sys ]] && kernel_is 2 6 && mkdir ${EROOT}sys
 
 	echo
 	elog "If you are upgrading from a previous kernel, you may be interested"
@@ -1273,11 +1278,11 @@ kernel-2_pkg_postrm() {
 	[[ ${ETYPE} == headers ]] && return 0
 
 	# If there isn't anything left behind, then don't complain.
-	[[ -e ${ROOT}usr/src/linux-${KV_FULL} ]] || return 0
+	[[ -e ${EROOT}usr/src/linux-${KV_FULL} ]] || return 0
 	echo
 	ewarn "Note: Even though you have successfully unmerged "
 	ewarn "your kernel package, directories in kernel source location: "
-	ewarn "${ROOT}usr/src/linux-${KV_FULL}"
+	ewarn "${EROOT}usr/src/linux-${KV_FULL}"
 	ewarn "with modified files will remain behind. By design, package managers"
 	ewarn "will not remove these modified files and the directories they reside in."
 	echo
