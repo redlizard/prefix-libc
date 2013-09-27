@@ -18,14 +18,18 @@
 #
 # alt_prefix and TPREFIX in the table are defined as followed
 
-alt_prefix() {
-	is_crosscompile && echo /usr/${CTARGET}
-}
-
-TPREFIX=$(is_crosscompile || echo "${EPREFIX}")
-
 : ${ED:=${D}}
 : ${EROOT:=${ROOT}}
+
+TPREFIX="$(is_crosscompile && echo "${TPREFIX}" || echo "${EPREFIX}")"
+
+alt_prefix() {
+	is_crosscompile && echo /usr/${CTARGET}${TPREFIX}
+}
+
+alt_install_prefix() {
+	is_crosscompile && echo "${EPREFIX}"/usr/${CTARGET}
+}
 
 # We need to be able to set alternative headers for
 # compiling for non-native platform
