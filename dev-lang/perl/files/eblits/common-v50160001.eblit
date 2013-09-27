@@ -2,6 +2,9 @@
 # Distributed under the terms of the GNU General Public License v2
 # $Header: /var/cvsroot/gentoo-x86/dev-lang/perl/files/eblits/common-v50160001.eblit,v 1.1 2012/06/05 17:52:35 tove Exp $
 
+: ${ED:=${D}}
+: ${EROOT:=${ROOT}}
+
 src_remove_dual_file() {
 	local i pkg ver
 	pkg="$1"
