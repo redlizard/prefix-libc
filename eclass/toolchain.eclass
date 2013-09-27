@@ -47,6 +47,8 @@ is_crosscompile() {
 : ${ED:=${D}}
 : ${EROOT:=${ROOT}}
 
+TPREFIX="$(is_crosscompile && echo "${TPREFIX}" || echo "${EPREFIX}")"
+
 # General purpose version check.  Without a second arg matches up to minor version (x.x.x)
 # (ie. 4.6.0_pre9999 matches 4 or 4.6 or 4.6.0 but not 4.6.1)
 tc_version_is_at_least() { 
@@ -813,6 +815,11 @@ toolchain_src_unpack() {
 	done
 	sed -i 's|A-Za-z0-9|[:alnum:]|g' "${S}"/gcc/*.awk #215828
 
+	if use prefix && use rap ; then
+		# Prefixify the dynamic linker location.
+		sed -i "s@-dynamic-linker @-dynamic-linker ${TPREFIX}@g" $(find gcc/config -name '*.h')
+	fi
+
 	if [[ -x contrib/gcc_update ]] ; then
 		einfo "Touching generated files"
 		./contrib/gcc_update --touch | \
@@ -1178,10 +1185,10 @@ gcc_do_configure() {
 			elif built_with_use --hidden --missing false ${CATEGORY}/${needed_libc} crosscompile_opts_headers-only ; then
 				confgcc+=(
 					"${confgcc_no_libc[@]}"
-					--with-sysroot="${EPREFIX}"${PREFIX}/${CTARGET}
+					--with-sysroot="${EPREFIX}"${PREFIX}/${CTARGET}"${TPREFIX}"
 				)
 			else
-				confgcc+=( --with-sysroot="${EPREFIX}"${PREFIX}/${CTARGET} )
+				confgcc+=( --with-sysroot="${EPREFIX}"${PREFIX}/${CTARGET}"${TPREFIX}" )
 			fi
 		fi
 
@@ -1198,6 +1205,10 @@ gcc_do_configure() {
 		*)
 			confgcc+=( --enable-threads=posix ) ;;
 		esac
+
+		if use prefix && use rap ; then
+			confgcc+=( --with-sysroot="${TPREFIX}" )
+		fi
 	fi
 	# __cxa_atexit is "essential for fully standards-compliant handling of
 	# destructors", but apparently requires glibc.
