@@ -10,7 +10,7 @@ HOMEPAGE="http://gcc.gnu.org/"
 LICENSE="GPL-2 LGPL-2.1"
 RESTRICT="strip" # cross-compilers need controlled stripping
 
-inherit eutils versionator libtool toolchain-funcs flag-o-matic gnuconfig multilib fixheadtails pax-utils
+inherit eutils versionator libtool toolchain-funcs flag-o-matic gnuconfig multilib fixheadtails pax-utils prefix
 
 if [[ ${PV} == *_pre9999* ]] ; then
 	EGIT_REPO_URI="git://gcc.gnu.org/git/gcc.git"
@@ -43,9 +43,6 @@ fi
 is_crosscompile() {
 	[[ ${CHOST} != ${CTARGET} ]]
 }
-
-: ${ED:=${D}}
-: ${EROOT:=${ROOT}}
 
 TPREFIX="$(is_crosscompile && echo "${TPREFIX}" || echo "${EPREFIX}")"
 
