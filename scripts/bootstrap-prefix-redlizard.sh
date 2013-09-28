@@ -340,7 +340,9 @@ sys-devel/binutils-config::gentoo_prefix
 sys-devel/binutils::gentoo_prefix
 sys-devel/gcc-config::gentoo_prefix
 sys-devel/gcc::gentoo_prefix
+sys-devel/libtool::gentoo_prefix
 sys-libs/glibc::gentoo_prefix
+sys-kernel/linux-headers::gentoo_prefix
 " >> ${ROOT}/etc/portage/package.mask
 		fi
 
@@ -1093,8 +1095,10 @@ bootstrap_stage3() {
 				mkdir -p "${EPREFIX}"/tmp/cross-overlay/metadata
 				cp "${PORTDIR_RAP}"/metadata/layout.conf "${EPREFIX}"/tmp/cross-overlay/metadata
 				mkdir -p "${EPREFIX}"/tmp/cross-overlay/cross-"${CHOST}"
-				cp -r "${PORTDIR_RAP}"/{sys-devel/binutils,sys-devel/gcc,sys-libs/glibc} "${PORTDIR}"/sys-kernel/linux-headers "${EPREFIX}"/tmp/cross-overlay/cross-"${CHOST}"
-				cp -r "${PORTDIR_RAP}"/eclass "${EPREFIX}/tmp/cross-overlay"
+				for package in sys-devel/binutils sys-devel/gcc sys-libs/glibc sys-kernel/linux-headers; do
+					ln -s "${PORTDIR_RAP}"/$package "${EPREFIX}"/tmp/cross-overlay/cross-"${CHOST}"
+				done
+				ln -s "${PORTDIR_RAP}"/eclass "${EPREFIX}/tmp/cross-overlay"
 				echo "PORTDIR_OVERLAY=\"\${PORTDIR_OVERLAY} ${EPREFIX}/tmp/cross-overlay\"" >> ${EPREFIX}/tmp/etc/portage/make.conf
 				echo "cross-${CHOST}" >> ${EPREFIX}/tmp/etc/portage/categories
 			fi
@@ -1123,10 +1127,12 @@ bootstrap_stage3() {
 			# the entire dependency tree here if the host already has a serviceable one.
 			type -P perl > /dev/null || emerge_host_pkgs dev-lang/perl || return 1
 	
+			TPREFIX="${EPREFIX}" \
 			CTARGET=${CHOST} \
 			CHOST=${XHOST} \
 			emerge_host_pkgs --nodeps cross-${CHOST}/linux-headers || return 1
 	
+			TPREFIX="${EPREFIX}" \
 			CTARGET=${CHOST} \
 			CHOST=${XHOST} \
 			USE="${USE} crosscompile_opts_headers-only" \
@@ -1139,7 +1145,6 @@ bootstrap_stage3() {
 			emerge_host_pkgs --nodeps cross-${CHOST}/binutils || return 1
 	
 			TPREFIX="${EPREFIX}" \
-			EXTRA_ECONF="--with-sysroot=${EPREFIX}/tmp/usr/${CHOST}" \
 			CTARGET=${CHOST} \
 			CHOST=${XHOST} \
 			USE="${USE} -cxx -fortran -openmp -mudflap" \
@@ -1154,10 +1159,12 @@ bootstrap_stage3() {
 			# Convince portage that we have a full glibc
 			rm -rf "${EPREFIX}"/tmp/var/db/pkg/cross-${CHOST}/glibc-*
 			cp -R "${EPREFIX}"/var/db/pkg/sys-libs/glibc-* "${EPREFIX}"/tmp/var/db/pkg/cross-${CHOST}
+			rm -rf "${EPREFIX}"/tmp/usr/${CHOST}
+			ln -s / "${EPREFIX}"/tmp/usr/${CHOST}
 	
 			grep cxx "${EPREFIX}"/tmp/var/db/pkg/cross-${CHOST}/gcc-*/USE >/dev/null || \
 			TPREFIX="${EPREFIX}" \
-			EPREFIX="${EPREFIX}"/tmp \
+			EPREFIX="${EPREFIX}/tmp" \
 			CTARGET=${CHOST} \
 			CHOST=${XHOST} \
 			emerge --oneshot --nodeps cross-${CHOST}/gcc || return 1
