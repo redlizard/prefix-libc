@@ -10,7 +10,7 @@ HOMEPAGE="http://gcc.gnu.org/"
 LICENSE="GPL-2 LGPL-2.1"
 RESTRICT="strip" # cross-compilers need controlled stripping
 
-inherit eutils versionator libtool toolchain-funcs flag-o-matic gnuconfig multilib fixheadtails pax-utils prefix
+inherit eutils versionator libtool toolchain-funcs flag-o-matic gnuconfig multilib fixheadtails pax-utils
 
 if [[ ${PV} == *_pre9999* ]] ; then
 	EGIT_REPO_URI="git://gcc.gnu.org/git/gcc.git"
@@ -517,7 +517,7 @@ create_gcc_env_entry() {
 	LDPATH="${ldpaths}"
 	MANPATH="${EPREFIX}${DATAPATH}/man"
 	INFOPATH="${EPREFIX}${DATAPATH}/info"
-	STDCXX_INCDIR="${EPREFIX}${STDCXX_INCDIR##*/}"
+	STDCXX_INCDIR="${STDCXX_INCDIR##*/}"
 	CTARGET="${CTARGET}"
 	GCC_SPECS="${gcc_specs_file}"
 	MULTIOSDIRS="${mosdirs}"
@@ -1273,11 +1273,12 @@ gcc_do_configure() {
 
 	# Nothing wrong with a good dose of verbosity
 	echo
-	einfo "PREFIX:			${EPREFIX}${PREFIX}"
-	einfo "BINPATH:			${EPREFIX}${BINPATH}"
-	einfo "LIBPATH:			${EPREFIX}${LIBPATH}"
-	einfo "DATAPATH:		${EPREFIX}${DATAPATH}"
-	einfo "STDCXX_INCDIR:	${EPREFIX}${STDCXX_INCDIR}"
+	einfo "EPREFIX: 		${EPREFIX}"
+	einfo "PREFIX:			${PREFIX}"
+	einfo "BINPATH:			${BINPATH}"
+	einfo "LIBPATH:			${LIBPATH}"
+	einfo "DATAPATH:		${DATAPATH}"
+	einfo "STDCXX_INCDIR:	${STDCXX_INCDIR}"
 	echo
 	einfo "Configuring GCC with: ${confgcc[@]//--/\n\t--}"
 	echo
@@ -1765,13 +1766,13 @@ gcc_movelibs() {
 				fi
 			fi
 		done
-		fix_libtool_libdir_paths "${EPREFIX}${LIBPATH}/${MULTIDIR}"
+		fix_libtool_libdir_paths "${LIBPATH}/${MULTIDIR}"
 
 		# SLOT up libgcj.pc if it's available (and let gcc-config worry about links)
 		FROMDIR="${PREFIX}/lib/${OS_MULTIDIR}"
 		for x in "${ED}${FROMDIR}"/pkgconfig/libgcj*.pc ; do
 			[[ -f ${x} ]] || continue
-			sed -i "/^libdir=/s:=.*:=${LIBPATH}/${MULTIDIR}:" "${x}"
+			sed -i "/^libdir=/s:=.*:=${EPREFIX}${LIBPATH}/${MULTIDIR}:" "${x}"
 			mv "${x}" "${ED}${FROMDIR}"/pkgconfig/libgcj-${GCC_PV}.pc || die
 		done
 	done
@@ -2045,7 +2046,7 @@ setup_multilib_osdirnames() {
 # -are-, and not where they -used- to be.  also, any dependencies we have
 # on our own .la files need to be updated.
 fix_libtool_libdir_paths() {
-	pushd "${D}" >/dev/null
+	pushd "${ED}" >/dev/null
 
 	pushd "./${1}" >/dev/null
 	local dir="${PWD#${D%/}}"
