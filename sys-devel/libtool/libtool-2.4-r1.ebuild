@@ -25,6 +25,8 @@ DEPEND="${RDEPEND}
 	test? ( !<sys-devel/binutils-2.20 )
 	app-arch/xz-utils"
 
+: ${ED:=${D}}
+
 src_unpack() {
 	xz -dc "${DISTDIR}"/${A} > ${P}.tar #356089
 	unpack ./${P}.tar
@@ -46,17 +48,17 @@ src_configure() {
 	# to find a bash shell.  if /bin/sh is bash, it uses that.  this can
 	# cause problems for people who switch /bin/sh on the fly to other
 	# shells, so just force libtool to use /bin/bash all the time.
-	export CONFIG_SHELL=/bin/bash
+	export CONFIG_SHELL=${EPREFIX}/bin/bash
 
-	default
+	econf $(use prefix && echo --with-sysroot="${EPREFIX}")
 }
 
 src_install() {
 	emake DESTDIR="${D}" install || die
 	dodoc AUTHORS ChangeLog* NEWS README THANKS TODO doc/PLATFORMS
 
-	for x in $(find "${D}" -name config.guess -o -name config.sub) ; do
-		rm -f "${x}" ; ln -sf /usr/share/gnuconfig/${x##*/} "${x}"
+	for x in $(find "${ED}" -name config.guess -o -name config.sub) ; do
+		rm -f "${x}" ; ln -sf "${EPREFIX}"/usr/share/gnuconfig/${x##*/} "${x}"
 	done
 }
 

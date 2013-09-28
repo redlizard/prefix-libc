@@ -32,6 +32,8 @@ DEPEND="${RDEPEND}
 	app-arch/xz-utils"
 [[ ${PV} == "9999" ]] && DEPEND+=" sys-apps/help2man"
 
+: ${ED:=${D}}
+
 src_unpack() {
 	if [[ ${PV} == "9999" ]] ; then
 		git-2_src_unpack
@@ -59,9 +61,9 @@ src_configure() {
 	# to find a bash shell.  if /bin/sh is bash, it uses that.  this can
 	# cause problems for people who switch /bin/sh on the fly to other
 	# shells, so just force libtool to use /bin/bash all the time.
-	export CONFIG_SHELL=/bin/bash
+	export CONFIG_SHELL=${EPREFIX}/bin/bash
 
-	econf $(use_enable static-libs static)
+	econf $(use_enable static-libs static) $(use prefix && echo --with-sysroot="${EPREFIX}")
 }
 
 src_install() {
@@ -78,8 +80,8 @@ src_install() {
 	dosed '1,/^build_old_libs=/{/^build_old_libs=/{s:=.*:=yes:}}' /usr/bin/libtool || die
 
 	local x
-	for x in $(find "${D}" -name config.guess -o -name config.sub) ; do
-		ln -sf /usr/share/gnuconfig/${x##*/} "${x}"
+	for x in $(find "${ED}" -name config.guess -o -name config.sub) ; do
+		ln -sf "${EPREFIX}"/usr/share/gnuconfig/${x##*/} "${x}"
 	done
 }
 
