@@ -127,6 +127,8 @@ src_prepare() {
 		Modules/getpath.c \
 		setup.py || die "sed failed to replace @@GENTOO_LIBDIR@@"
 
+	sed -i -e "s@\B/usr/include@${EPREFIX}&@g" Lib/plat-*/regen
+
 	eautoconf
 	eautoheader
 }

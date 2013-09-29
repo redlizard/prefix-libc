@@ -99,6 +99,8 @@ src_prepare() {
 	# Disable ABI flags.
 	sed -e "s/ABIFLAGS=\"\${ABIFLAGS}.*\"/:/" -i configure.ac || die "sed failed"
 
+	sed -i -e "s@\B/usr/include@${EPREFIX}&@g" Lib/plat-*/regen
+
 	eautoconf
 	eautoheader
 }
