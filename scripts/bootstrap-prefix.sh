@@ -2023,6 +2023,12 @@ case ${CHOST}:${LC_ALL}:${LANG} in
 	;;
 esac
 
+if [[ -z ${PORTDIR_RAP} ]] ; then
+	eerror "Please set the environment variable PORTDIR_RAP to point"
+	eerror "to the location of your prefix-libc repository."
+	exit 1
+fi
+
 # Just guessing a prefix is kind of scary.  Hence, to make it a bit less
 # scary, we force the user to give the prefix location here.  This also
 # makes the script a bit less dangerous as it will die when just run to
@@ -2062,7 +2068,6 @@ esac
 
 CXXFLAGS="${CXXFLAGS:-${CFLAGS}}"
 PORTDIR=${PORTDIR:-"${ROOT}/usr/portage"}
-PORTDIR_RAP=${PORTDIR_RAP:-"${ROOT}/usr/local/portage"}
 DISTDIR=${DISTDIR:-"${PORTDIR}/distfiles"}
 PORTAGE_TMPDIR=${ROOT}/var/tmp
 DISTFILES_URL="http://dev.gentoo.org/~grobian/distfiles"
