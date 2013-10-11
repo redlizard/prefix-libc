@@ -168,6 +168,11 @@ HOSTCC='gcc -m64'
 			ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib64 -L${ROOT}/lib64 -L${ROOT}/tmp/usr/lib\""
 			rap=true
 			;;
+		armv6j-hardfloat-linux-gnueabi)
+			profile="${PORTDIR_RAP}/profiles/default/linux/arm/13.0/armv6j/rap"
+			ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib64 -L${ROOT}/lib64 -L${ROOT}/tmp/usr/lib\""
+			rap=true
+			;;
 		armv5tel-softfloat-linux-gnueabi)
 			profile="${PORTDIR_RAP}/profiles/default/linux/arm/13.0/armv5te/rap"
 			ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib64 -L${ROOT}/lib64 -L${ROOT}/tmp/usr/lib\""
@@ -1835,6 +1840,9 @@ if [[ -z ${CHOST} ]]; then
 						;;
 					armv7l)
 						CHOST=armv7a-hardfloat-linux-gnueabi
+						;;
+					armv6j)
+						CHOST=armv6j-hardfloat-linux-gnueabi
 						;;
 					armv5te*)
 						CHOST=armv5tel-softfloat-linux-gnueabi
