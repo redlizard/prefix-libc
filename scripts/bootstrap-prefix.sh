@@ -1173,6 +1173,8 @@ bootstrap_stage3() {
 			CTARGET=${CHOST} \
 			CHOST=${XHOST} \
 			emerge --oneshot --nodeps cross-${CHOST}/gcc || return 1
+
+			grep -h '^LDPATH=' "${EPREFIX}"/tmp/etc/env.d/gcc/* > "${EPREFIX}"/etc/env.d/99-gcc-temp
 		else
 			error This script currently only supports RAP.
 			exit 1
@@ -1181,6 +1183,8 @@ bootstrap_stage3() {
 
 	export EPREFIX
 	export PORTAGE_CONFIGROOT=${EPREFIX}
+
+	env-update && [[ -e ${EPREFIX}/usr/sbin/ldconfig ]] && "${EPREFIX}"/usr/sbin/ldconfig
 
 	# --oneshot --nodeps
 	local pkgs=(
@@ -1199,8 +1203,9 @@ bootstrap_stage3() {
 	CBUILD=${XHOST} \
 	emerge_pkgs --nodeps "${pkgs[@]}" || return 1
 
+	rm -f "${EPREFIX}"/etc/env.d/99-gcc-temp
 	# HACK: This should be in portage.
-	[[ -e ${EPREFIX}/usr/sbin/ldconfig ]] && "${EPREFIX}"/usr/sbin/ldconfig
+	env-update && [[ -e ${EPREFIX}/usr/sbin/ldconfig ]] && "${EPREFIX}"/usr/sbin/ldconfig
 
 	# Cross-compiled bash is badly broken, so we need to rebuild it natively.
 	[[ $(cat "${EPREFIX}"/var/db/pkg/app-shells/bash-*/CBUILD) != $(cat "${EPREFIX}"/var/db/pkg/app-shells/bash-*/CHOST) ]] && \
