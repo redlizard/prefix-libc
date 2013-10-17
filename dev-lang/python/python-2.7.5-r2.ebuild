@@ -1,21 +1,21 @@
 # Copyright 1999-2013 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Header: /var/cvsroot/gentoo-x86/dev-lang/python/python-2.7.3-r3.ebuild,v 1.22 2013/05/25 22:32:46 floppym Exp $
+# $Header: /var/cvsroot/gentoo-x86/dev-lang/python/python-2.7.5-r2.ebuild,v 1.14 2013/09/26 19:17:17 floppym Exp $
 
-EAPI="3"
+EAPI="4"
 WANT_AUTOMAKE="none"
 WANT_LIBTOOL="none"
 
 inherit autotools eutils flag-o-matic multilib pax-utils python-utils-r1 toolchain-funcs multiprocessing
 
 MY_P="Python-${PV}"
-PATCHSET_REVISION="1"
+PATCHSET_REVISION="0"
 PREFIX_PATCHREV="-r2"
 
 DESCRIPTION="An interpreted, interactive, object-oriented programming language"
 HOMEPAGE="http://www.python.org/"
-SRC_URI="http://www.python.org/ftp/python/${PV}/${MY_P}.tar.bz2
-	mirror://gentoo/python-gentoo-patches-${PV}-${PATCHSET_REVISION}.tar.bz2
+SRC_URI="http://www.python.org/ftp/python/${PV}/${MY_P}.tar.xz
+	mirror://gentoo/python-gentoo-patches-${PV}-${PATCHSET_REVISION}.tar.xz
 	prefix? ( http://dev.gentoo.org/~grobian/distfiles/python-prefix-${PV}-gentoo-patches${PREFIX_PATCHREV}.tar.bz2 )"
 
 LICENSE="PSF-2"
@@ -34,6 +34,10 @@ RDEPEND="app-arch/bzip2
 	virtual/libintl
 	!build? (
 		berkdb? ( || (
+			sys-libs/db:5.3
+			sys-libs/db:5.2
+			sys-libs/db:5.1
+			sys-libs/db:5.0
 			sys-libs/db:4.8
 			sys-libs/db:4.7
 			sys-libs/db:4.6
@@ -47,7 +51,7 @@ RDEPEND="app-arch/bzip2
 			>=sys-libs/ncurses-5.2
 			readline? ( >=sys-libs/readline-4.1 )
 		)
-		sqlite? ( >=dev-db/sqlite-3.3.8:3[extensions] )
+		sqlite? ( >=dev-db/sqlite-3.3.8:3 )
 		ssl? ( dev-libs/openssl )
 		tk? (
 			>=dev-lang/tk-8.0[-aqua]
@@ -83,21 +87,23 @@ pkg_setup() {
 
 src_prepare() {
 	# Ensure that internal copies of expat, libffi and zlib are not used.
-	rm -fr Modules/expat
-	rm -fr Modules/_ctypes/libffi*
-	rm -fr Modules/zlib
+	rm -r Modules/expat || die
+	rm -r Modules/_ctypes/libffi* || die
+	rm -r Modules/zlib || die
 
-	local excluded_patches
-	if ! tc-is-cross-compiler; then
-		excluded_patches+=" *_all_crosscompile.patch"
+	if tc-is-cross-compiler; then
+		local EPATCH_EXCLUDE="*_regenerate_platform-specific_modules.patch"
 	fi
 
 	# if building a patched source-tar, comment the rm's above, and uncomment
 	# this line:
-	#excluded_patches="01_all_prefix-no-patch-invention.patch"
+	#local EPATCH_EXCLUDE=" 01_all_prefix-no-patch-invention.patch"
 
-	EPATCH_EXCLUDE="${excluded_patches}" EPATCH_SUFFIX="patch" \
-		epatch "${WORKDIR}/${PV}-${PATCHSET_REVISION}"
+	EPATCH_SUFFIX="patch" epatch "${WORKDIR}/${PV}-${PATCHSET_REVISION}"
+
+	epatch "${FILESDIR}/${P}-library-path.patch" #474882
+	epatch "${FILESDIR}/${P}-re_unsigned_ptrdiff.patch" #476426
+	epatch "${FILESDIR}/CVE-2013-4238_py27.patch"
 
 	# Prefix' round of patches
 	# http://prefix.gentooexperimental.org:8000/python-patches-2_7
@@ -111,10 +117,13 @@ src_prepare() {
 			Makefile.pre.in || die
 		# Python upstream refuses to listen to configure arguments
 		sed -i -e '/FRAMEWORKINSTALLAPPSPREFIX=/s:="[^"]*":="${prefix}/../Applications":' \
-			configure.in configure || die
+			configure.ac configure || die
 	fi
 	# don't try to do fancy things on Darwin
 	sed -i -e 's/__APPLE__/__NO_MUCKING_AROUND__/g' Modules/readline.c || die
+
+	# Fix for cross-compiling.
+	epatch "${FILESDIR}/python-2.7.5-nonfatal-compileall.patch"
 
 	sed -i -e "s:@@GENTOO_LIBDIR@@:$(get_libdir):g" \
 		Lib/distutils/command/install.py \
@@ -127,7 +136,13 @@ src_prepare() {
 		Modules/getpath.c \
 		setup.py || die "sed failed to replace @@GENTOO_LIBDIR@@"
 
+	use prefix && use rap && for dir in /lib /usr/lib /usr/include; do
+		sed -i -e "s@'${dir}@'${EPREFIX}${dir}@g" setup.py
+	done
+
 	sed -i -e "s@\B/usr/include@${EPREFIX}&@g" Lib/plat-*/regen
+
+	epatch_user
 
 	eautoconf
 	eautoheader
@@ -195,35 +210,14 @@ src_configure() {
 		append-cppflags -I${EPREFIX}/usr/include
 		append-ldflags -L${EPREFIX}/$(get_libdir)
 		append-ldflags -L${EPREFIX}/usr/$(get_libdir)
-		# fix compilation on some 64-bits Linux hosts, #381163
-		use rap || for hostlibdir in /usr/lib32 /usr/lib64 /lib32 /lib64 ; do
+		# fix compilation on some 64-bits Linux hosts, #381163, #473520
+		for hostlibdir in /usr/lib32 /usr/lib64 /usr/lib /lib32 /lib64; do
 			[[ -d ${hostlibdir} ]] || continue
 			append-ldflags -L${hostlibdir}
 		done
 		# Have to move $(CPPFLAGS) to before $(CFLAGS) to ensure that
 		# local include paths - set in $(CPPFLAGS) - are searched first.
 		sed -i -e "/^PY_CFLAGS[ \\t]*=/s,\\\$(CFLAGS)[ \\t]*\\\$(CPPFLAGS),\$(CPPFLAGS) \$(CFLAGS)," Makefile.pre.in || die
-	fi
-
-	# Run the configure scripts in parallel.
-	multijob_init
-
-	mkdir -p "${WORKDIR}"/{${CBUILD},${CHOST}}
-
-	if tc-is-cross-compiler; then
-		(
-		multijob_child_init
-		cd "${WORKDIR}"/${CBUILD} >/dev/null
-		OPT="-O1" CFLAGS="" CPPFLAGS="" LDFLAGS="" CC="" \
-		"${S}"/configure \
-			--{build,host}=${CBUILD} \
-			|| die "cross-configure failed"
-		) &
-		multijob_post_fork
-
-		# The configure script assumes it's buggy when cross-compiling.
-		export ac_cv_buggy_getaddrinfo=no
-		export ac_cv_have_long_long_format=yes
 	fi
 
 	# Export CXX so it ends up in /usr/lib/python2.X/config/Makefile.
@@ -262,11 +256,14 @@ src_configure() {
 		&& myconf="${myconf} --enable-framework=${EPREFIX}/usr/lib" \
 		|| myconf="${myconf} --enable-shared"
 
+	BUILD_DIR="${WORKDIR}/${CHOST}"
+	mkdir -p "${BUILD_DIR}" || die
+	cd "${BUILD_DIR}" || die
+
 	# note: for a framework build we need to use ucs2 because OSX
 	# uses that internally too:
 	# http://bugs.python.org/issue763708
-	cd "${WORKDIR}"/${CHOST}
-	ECONF_SOURCE=${S} OPT="" \
+	ECONF_SOURCE="${S}" OPT="" \
 	econf \
 		--with-fpectl \
 		$(use_enable ipv6) \
@@ -280,45 +277,21 @@ src_configure() {
 		--with-system-expat \
 		--with-system-ffi \
 		${myconf}
-
-	if tc-is-cross-compiler; then
-		# Modify the Makefile.pre so we don't regen for the host/ one.
-		# We need to link the host python programs into $PWD and run
-		# them from here because the distutils sysconfig module will
-		# parse Makefile/etc... from argv[0], and we need it to pick
-		# up the target settings, not the host ones.
-		sed -i \
-			-e '1iHOSTPYTHONPATH = ./hostpythonpath:' \
-			-e '/^HOSTPYTHON/s:=.*:= ./hostpython:' \
-			-e '/^HOSTPGEN/s:=.*:= ./Parser/hostpgen:' \
-			Makefile{.pre,} || die "sed failed"
-	fi
-
-	multijob_finish
 }
 
 src_compile() {
-	if tc-is-cross-compiler; then
-		cd "${WORKDIR}"/${CBUILD}
-		# Disable as many modules as possible -- but we need a few to install.
-		PYTHON_DISABLE_MODULES=$(
-			sed -n "/Extension('/{s:^.*Extension('::;s:'.*::;p}" "${S}"/setup.py | \
-				egrep -v '(unicodedata|time|cStringIO|_struct|binascii)'
-		) \
-		PTHON_DISABLE_SSL="1" \
-		SYSROOT= \
-		emake || die "cross-make failed"
-		# See comment in src_configure about these.
-		ln python ../${CHOST}/hostpython || die
-		ln Parser/pgen ../${CHOST}/Parser/hostpgen || die
-		ln -s ../${CBUILD}/build/lib.*/ ../${CHOST}/hostpythonpath || die
+	# Avoid invoking pgen for cross-compiles.
+	touch Include/graminit.h Python/graminit.c
+
+	cd "${BUILD_DIR}" || die
+	emake
+
+	# Work around bug 329499. See also bug 413751 and 457194.
+	if has_version dev-libs/libffi[pax_kernel]; then
+		pax-mark E python
+	else
+		pax-mark m python
 	fi
-
-	cd "${WORKDIR}"/${CHOST}
-	default
-
-	# Work around bug 329499. See also bug 413751.
-	pax-mark m python
 }
 
 src_test() {
@@ -328,7 +301,7 @@ src_test() {
 		return
 	fi
 
-	cd "${WORKDIR}"/${CHOST}
+	cd "${BUILD_DIR}" || die
 
 	# Skip failing tests.
 	local skipped_tests="distutils gdb"
@@ -338,7 +311,7 @@ src_test() {
 	done
 
 	# Rerun failed tests in verbose mode (regrtest -w).
-	PYTHONDONTWRITEBYTECODE="" emake test EXTRATESTOPTS="-w" < /dev/tty
+	emake test EXTRATESTOPTS="-w" < /dev/tty
 	local result="$?"
 
 	for test in ${skipped_tests}; do
@@ -360,11 +333,9 @@ src_test() {
 }
 
 src_install() {
-	[[ -z "${ED}" ]] && ED="${D%/}${EPREFIX}/"
-
 	local libdir=${ED}/usr/$(get_libdir)/python${SLOT}
 
-	cd "${WORKDIR}"/${CHOST}
+	cd "${BUILD_DIR}" || die
 	[[ ${CHOST} == *-mint* ]] && keepdir /usr/lib/python${SLOT}/lib-dynload/
 	if use aqua ; then
 		local fwdir="${EPREFIX}"/usr/$(get_libdir)/Python.framework
@@ -373,8 +344,7 @@ src_install() {
 		# sharedmods (during bootstrap), would build them twice in parallel.
 
 		# let the makefiles do their thing
-		emake -j1 CC="$(tc-getCC)" DESTDIR="${D}" STRIPFLAG= altinstall || die
-		emake DESTDIR="${D}" maninstall || die
+		emake -j1 CC="$(tc-getCC)" DESTDIR="${D}" STRIPFLAG= altinstall
 
 		# avoid framework incompatability, degrade to a normal UNIX lib
 		mkdir -p "${ED}"/usr/$(get_libdir)
@@ -483,14 +453,13 @@ src_install() {
 </plist>
 EOF
 	else
-		emake DESTDIR="${D}" altinstall || die "emake altinstall failed"
-		emake DESTDIR="${D}" maninstall || die "emake maninstall failed"
+		emake DESTDIR="${D}" altinstall
 	fi
 
 	sed -e "s/\(LDFLAGS=\).*/\1/" -i "${libdir}/config/Makefile" || die "sed failed"
 
 	# Backwards compat with Gentoo divergence.
-	dosym python${SLOT}-config /usr/bin/python-config-${SLOT} || die
+	dosym python${SLOT}-config /usr/bin/python-config-${SLOT}
 
 	# Fix collisions between different slots of Python.
 	mv "${ED}usr/bin/2to3" "${ED}usr/bin/2to3-${SLOT}"
@@ -501,35 +470,42 @@ EOF
 	# http://src.opensolaris.org/source/xref/jds/spec-files/trunk/SUNWPython.spec
 	# These #defines cause problems when building c99 compliant python modules
 	# http://bugs.python.org/issue1759169
-	[[ ${CHOST} == *-solaris* ]] && dosed -e \
+	[[ ${CHOST} == *-solaris* ]] && sed -i -e \
 		's:^\(^#define \(_POSIX_C_SOURCE\|_XOPEN_SOURCE\|_XOPEN_SOURCE_EXTENDED\).*$\):/* \1 */:' \
-		 /usr/include/python${SLOT}/pyconfig.h
+		 "${ED}"/usr/include/python${SLOT}/pyconfig.h
 
 	if use build; then
 		rm -fr "${ED}usr/bin/idle${SLOT}" "${libdir}/"{bsddb,dbhash.py,idlelib,lib-tk,sqlite3,test}
 	else
+		use berkdb || rm -r "${libdir}/"{bsddb,dbhash.py,test/test_bsddb*} || die
+		use sqlite || rm -r "${libdir}/"{sqlite3,test/test_sqlite*} || die
+		use tk || rm -r "${ED}usr/bin/idle${SLOT}" "${libdir}/"{idlelib,lib-tk} || die
 		use elibc_uclibc && rm -fr "${libdir}/"{bsddb/test,test}
-		use berkdb || rm -fr "${libdir}/"{bsddb,dbhash.py,test/test_bsddb*}
-		use sqlite || rm -fr "${libdir}/"{sqlite3,test/test_sqlite*}
-		use tk || rm -fr "${ED}usr/bin/idle${SLOT}" "${libdir}/"{idlelib,lib-tk}
 	fi
 
-	use threads || rm -fr "${libdir}/multiprocessing"
-	use wininst || rm -f "${libdir}/distutils/command/"wininst-*.exe
+	use threads || rm -r "${libdir}/multiprocessing" || die
+	use wininst || rm -r "${libdir}/distutils/command/"wininst-*.exe || die
 
 	dodoc "${S}"/Misc/{ACKS,HISTORY,NEWS} || die "dodoc failed"
 
 	if use examples; then
 		insinto /usr/share/doc/${PF}/examples
-		doins -r "${S}"/Tools || die "doins failed"
+		doins -r "${S}"/Tools
 	fi
 	insinto /usr/share/gdb/auto-load/usr/$(get_libdir) #443510
-	local libname=$(printf 'e:\n\t@echo $(INSTSONAME)\ninclude Makefile\n' | \
-		emake --no-print-directory -s -f - 2>/dev/null)
+	local libname
+	if use aqua ; then
+		# we do framework, so the emake trick below returns a pathname
+		# since that won't work here, use a (cheap) trick instead
+		libname=libpython${SLOT}
+	else
+		libname=$(printf 'e:\n\t@echo $(INSTSONAME)\ninclude Makefile\n' | \
+			emake --no-print-directory -s -f - 2>/dev/null)
+	fi
 	newins "${S}"/Tools/gdb/libpython.py "${libname}"-gdb.py
 
-	newconfd "${FILESDIR}/pydoc.conf" pydoc-${SLOT} || die "newconfd failed"
-	newinitd "${FILESDIR}/pydoc.init" pydoc-${SLOT} || die "newinitd failed"
+	newconfd "${FILESDIR}/pydoc.conf" pydoc-${SLOT}
+	newinitd "${FILESDIR}/pydoc.init" pydoc-${SLOT}
 	sed \
 		-e "s:@PYDOC_PORT_VARIABLE@:PYDOC${SLOT/./_}_PORT:" \
 		-e "s:@PYDOC@:pydoc${SLOT}:" \
@@ -540,9 +516,8 @@ EOF
 
 	# if not using a cross-compiler, use the fresh binary
 	if ! tc-is-cross-compiler; then
-		local PYTHON=./python \
-			LD_LIBRARY_PATH=${LD_LIBRARY_PATH+${LD_LIBRARY_PATH}:}.
-		export LD_LIBRARY_PATH
+		local PYTHON=./python
+		local -x LD_LIBRARY_PATH=${LD_LIBRARY_PATH+${LD_LIBRARY_PATH}:}.
 	fi
 
 	echo "EPYTHON='${EPYTHON}'" > epython.py
@@ -556,9 +531,6 @@ pkg_preinst() {
 }
 
 eselect_python_update() {
-	local eselect_python_options
-	[[ -z "${EROOT}" || (! -d "${EROOT}" && -d "${ROOT}") ]] && EROOT="${ROOT%/}${EPREFIX}/"
-
 	if [[ -z "$(eselect python show)" || ! -f "${EROOT}usr/bin/$(eselect python show)" ]]; then
 		eselect python update
 	fi

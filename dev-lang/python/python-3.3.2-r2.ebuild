@@ -1,54 +1,61 @@
 # Copyright 1999-2013 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Header: /var/cvsroot/gentoo-x86/dev-lang/python/python-3.3.0.ebuild,v 1.7 2013/03/24 01:41:31 floppym Exp $
+# $Header: /var/cvsroot/gentoo-x86/dev-lang/python/python-3.3.2-r2.ebuild,v 1.6 2013/09/26 04:20:27 floppym Exp $
 
 EAPI="3"
 WANT_AUTOMAKE="none"
 WANT_LIBTOOL="none"
 
-inherit autotools eutils flag-o-matic multilib pax-utils python toolchain-funcs
+inherit autotools eutils flag-o-matic multilib pax-utils python-utils-r1 toolchain-funcs multiprocessing
 
 MY_P="Python-${PV}"
-PATCHSET_REVISION="1"
-PREFIX_PATCHREV="-r1"
+PATCHSET_REVISION="2"
+PREFIX_PATCHREV="-r2"
 
-DESCRIPTION="Python is an interpreted, interactive, object-oriented programming language."
+DESCRIPTION="An interpreted, interactive, object-oriented programming language"
 HOMEPAGE="http://www.python.org/"
 SRC_URI="http://www.python.org/ftp/python/${PV}/${MY_P}.tar.xz
-	mirror://gentoo/python-gentoo-patches-${PV}-${PATCHSET_REVISION}.tar.bz2
+	mirror://gentoo/python-gentoo-patches-${PV}-${PATCHSET_REVISION}.tar.xz
 	http://dev.gentoo.org/~grobian/distfiles/python-prefix-${PV}-gentoo-patches${PREFIX_PATCHREV}.tar.bz2"
 
 LICENSE="PSF-2"
 SLOT="3.3"
-PYTHON_ABI="${SLOT}"
-KEYWORDS="~amd64-linux ~ppc-macos ~x64-macos ~x86-macos ~sparc-solaris ~sparc64-solaris ~x64-solaris ~x86-solaris"
-IUSE="build doc elibc_uclibc examples gdbm hardened ipv6 +ncurses rap  +readline sqlite +ssl +threads tk wininst +xml"
+KEYWORDS="~amd64-linux ~x86-linux ~ppc-macos ~x64-macos ~x86-macos ~m68k-mint ~sparc-solaris ~sparc64-solaris ~x64-solaris ~x86-solaris"
+IUSE="build doc elibc_uclibc examples gdbm hardened ipv6 +ncurses +readline sqlite +ssl +threads tk wininst +xml"
+
+# Do not add a dependency on dev-lang/python to this ebuild.
+# If you need to apply a patch which requires python for bootstrapping, please
+# run the bootstrap code on your dev box and include the results in the
+# patchset. See bug 447752.
 
 RDEPEND="app-arch/bzip2
-		>=sys-libs/zlib-1.1.3
-		virtual/libffi
-		virtual/libintl
-		!build? (
-			gdbm? ( sys-libs/gdbm[berkdb] )
-			ncurses? (
-				>=sys-libs/ncurses-5.2
-				readline? ( >=sys-libs/readline-4.1 )
-			)
-			sqlite? ( >=dev-db/sqlite-3.3.8:3[extensions] )
-			ssl? ( dev-libs/openssl )
-			tk? (
-				>=dev-lang/tk-8.0
-				dev-tcltk/blt
-			)
-			xml? ( >=dev-libs/expat-2.1 )
+	app-arch/xz-utils
+	>=sys-libs/zlib-1.1.3
+	virtual/libffi
+	virtual/libintl
+	!build? (
+		gdbm? ( sys-libs/gdbm[berkdb] )
+		ncurses? (
+			>=sys-libs/ncurses-5.2
+			readline? ( >=sys-libs/readline-4.1 )
 		)
-		!!<sys-apps/sandbox-2.6-r1"
+		sqlite? ( >=dev-db/sqlite-3.3.8:3 )
+		ssl? ( dev-libs/openssl )
+		tk? (
+			>=dev-lang/tk-8.0
+			dev-tcltk/blt
+		)
+		xml? ( >=dev-libs/expat-2.1 )
+	)
+	!!<sys-apps/sandbox-2.6-r1"
 DEPEND="${RDEPEND}
-		virtual/pkgconfig
-		>=sys-devel/autoconf-2.65
-		!sys-devel/gcc[libffi]"
+	virtual/pkgconfig
+	>=sys-devel/autoconf-2.65
+	!sys-devel/gcc[libffi]"
 RDEPEND+=" !build? ( app-misc/mime-types )
 	doc? ( dev-python/python-docs:${SLOT} )"
+PDEPEND="app-admin/eselect-python
+	app-admin/python-updater"
 
 S="${WORKDIR}/${MY_P}"
 
@@ -58,13 +65,15 @@ src_prepare() {
 	rm -fr Modules/_ctypes/libffi*
 	rm -fr Modules/zlib
 
-	local excluded_patches
-	if ! tc-is-cross-compiler; then
-		excluded_patches="*_all_crosscompile.patch"
+	if tc-is-cross-compiler; then
+		# Invokes BUILDPYTHON, which is built for the host arch
+		local EPATCH_EXCLUDE="05_all_regenerate_platform-specific_modules.patch"
 	fi
 
-	EPATCH_EXCLUDE="${excluded_patches}" EPATCH_SUFFIX="patch" \
-		epatch "${WORKDIR}/${PV}-${PATCHSET_REVISION}"
+	EPATCH_SUFFIX="patch" epatch "${WORKDIR}/${PV}-${PATCHSET_REVISION}"
+
+	epatch "${FILESDIR}/python-3.3-CVE-2013-2099.patch"
+	epatch "${FILESDIR}/CVE-2013-4238_py33.patch"
 
 	# Prefix' round of patches
 	# http://prefix.gentooexperimental.org:8000/python-patches-3_3
@@ -86,14 +95,10 @@ src_prepare() {
 		Modules/getpath.c \
 		setup.py || die "sed failed to replace @@GENTOO_LIBDIR@@"
 
-	use prefix && use rap && for dir in /lib /usr/lib /usr/include; do
-		sed -i -e "s@'${dir}@'${EPREFIX}${dir}@g" setup.py
-	done
-
 	# Disable ABI flags.
 	sed -e "s/ABIFLAGS=\"\${ABIFLAGS}.*\"/:/" -i configure.ac || die "sed failed"
 
-	sed -i -e "s@\B/usr/include@${EPREFIX}&@g" Lib/plat-*/regen
+	epatch_user
 
 	eautoconf
 	eautoheader
@@ -140,23 +145,6 @@ src_configure() {
 		use hardened && replace-flags -O3 -O2
 	fi
 
-	if tc-is-cross-compiler; then
-		OPT="-O1" CFLAGS="" LDFLAGS="" CC="" \
-		./configure --{build,host}=${CBUILD} || die "cross-configure failed"
-		emake python Parser/pgen || die "cross-make failed"
-		mv python hostpython
-		mv Parser/pgen Parser/hostpgen
-		make distclean
-		sed -i \
-			-e "/^HOSTPYTHON/s:=.*:=./hostpython:" \
-			-e "/^HOSTPGEN/s:=.*:=./Parser/hostpgen:" \
-			Makefile.pre.in || die "sed failed"
-
-		# The configure script assumes it's buggy when cross-compiling.
-		export ac_cv_buggy_getaddrinfo=no
-		export ac_cv_have_long_long_format=yes
-	fi
-
 	# Export CXX so it ends up in /usr/lib/python3.X/config/Makefile.
 	tc-export CXX
 	# The configure script fails to use pkg-config correctly.
@@ -173,8 +161,13 @@ src_configure() {
 		dbmliborder+="${dbmliborder:+:}gdbm"
 	fi
 
+	BUILD_DIR="${WORKDIR}/${CHOST}"
+	mkdir -p "${BUILD_DIR}" || die
+	cd "${BUILD_DIR}" || die
+
 	# pymalloc #452720
-	OPT="" econf \
+	ECONF_SOURCE="${S}" OPT="" \
+	econf \
 		--with-fpectl \
 		--enable-shared \
 		$(use_enable ipv6) \
@@ -191,10 +184,18 @@ src_configure() {
 }
 
 src_compile() {
+	# Avoid invoking pgen for cross-compiles.
+	touch Include/graminit.h Python/graminit.c || die
+
+	cd "${BUILD_DIR}" || die
 	emake CPPFLAGS="" CFLAGS="" LDFLAGS="" || die "emake failed"
 
-	# Work around bug 329499. See also bug 413751.
-	pax-mark m python
+	# Work around bug 329499. See also bug 413751 and 457194.
+	if has_version dev-libs/libffi[pax_kernel]; then
+		pax-mark E python
+	else
+		pax-mark m python
+	fi
 }
 
 src_test() {
@@ -204,23 +205,20 @@ src_test() {
 		return
 	fi
 
-	# Byte compiling should be enabled here.
-	# Otherwise test_import fails.
-	python_enable_pyc
+	cd "${BUILD_DIR}" || die
 
 	# Skip failing tests.
 	local skipped_tests="gdb"
 
 	for test in ${skipped_tests}; do
-		mv Lib/test/test_${test}.py "${T}"
+		mv "${S}"/Lib/test/test_${test}.py "${T}"
 	done
 
-	# Rerun failed tests in verbose mode (regrtest -w).
-	emake test EXTRATESTOPTS="-w" CPPFLAGS="" CFLAGS="" LDFLAGS="" < /dev/tty
+	PYTHONDONTWRITEBYTECODE="" emake test EXTRATESTOPTS="-u -network" FLAGS="" CFLAGS="" LDFLAGS="" < /dev/tty
 	local result="$?"
 
 	for test in ${skipped_tests}; do
-		mv "${T}/test_${test}.py" Lib/test
+		mv "${T}/test_${test}.py" "${S}"/Lib/test
 	done
 
 	elog "The following tests have been skipped:"
@@ -229,10 +227,8 @@ src_test() {
 	done
 
 	elog "If you would like to run them, you may:"
-	elog "cd '${EPREFIX}$(python_get_libdir)/test'"
+	elog "cd '${EPREFIX}/usr/$(get_libdir)/python${SLOT}/test'"
 	elog "and run the tests separately."
-
-	python_disable_pyc
 
 	if [[ "${result}" -ne 0 ]]; then
 		die "emake test failed"
@@ -240,37 +236,45 @@ src_test() {
 }
 
 src_install() {
+	local libdir=${ED}/usr/$(get_libdir)/python${SLOT}
+
+	cd "${BUILD_DIR}" || die
+
 	emake DESTDIR="${D}" altinstall || die "emake altinstall failed"
-	python_clean_installation_image -q
 
 	sed \
 		-e "s/\(CONFIGURE_LDFLAGS=\).*/\1/" \
 		-e "s/\(PY_LDFLAGS=\).*/\1/" \
-		-i "${ED}$(python_get_libdir)/config-${SLOT}/Makefile" || die "sed failed"
+		-i "${libdir}/config-${SLOT}/Makefile" || die "sed failed"
 
-	mv "${ED}usr/bin/python${SLOT}-config" "${ED}usr/bin/python-config-${SLOT}"
+	# Backwards compat with Gentoo divergence.
+	dosym python${SLOT}-config /usr/bin/python-config-${SLOT} || die
 
 	# Fix collisions between different slots of Python.
 	rm -f "${ED}usr/$(get_libdir)/libpython3.so"
 
 	if use build; then
-		rm -fr "${ED}usr/bin/idle${SLOT}" "${ED}$(python_get_libdir)/"{idlelib,sqlite3,test,tkinter}
+		rm -fr "${ED}usr/bin/idle${SLOT}" "${libdir}/"{idlelib,sqlite3,test,tkinter}
 	else
-		use elibc_uclibc && rm -fr "${ED}$(python_get_libdir)/test"
-		use sqlite || rm -fr "${ED}$(python_get_libdir)/"{sqlite3,test/test_sqlite*}
-		use tk || rm -fr "${ED}usr/bin/idle${SLOT}" "${ED}$(python_get_libdir)/"{idlelib,tkinter,test/test_tk*}
+		use elibc_uclibc && rm -fr "${libdir}/test"
+		use sqlite || rm -fr "${libdir}/"{sqlite3,test/test_sqlite*}
+		use tk || rm -fr "${ED}usr/bin/idle${SLOT}" "${libdir}/"{idlelib,tkinter,test/test_tk*}
 	fi
 
-	use threads || rm -fr "${ED}$(python_get_libdir)/multiprocessing"
-	use wininst || rm -f "${ED}$(python_get_libdir)/distutils/command/"wininst-*.exe
+	use threads || rm -fr "${libdir}/multiprocessing"
+	use wininst || rm -f "${libdir}/distutils/command/"wininst-*.exe
 
-	dodoc Misc/{ACKS,HISTORY,NEWS} || die "dodoc failed"
+	dodoc "${S}"/Misc/{ACKS,HISTORY,NEWS} || die "dodoc failed"
 
 	if use examples; then
 		insinto /usr/share/doc/${PF}/examples
-		find Tools -name __pycache__ -print0 | xargs -0 rm -fr
-		doins -r Tools || die "doins failed"
+		find "${S}"/Tools -name __pycache__ -print0 | xargs -0 rm -fr
+		doins -r "${S}"/Tools || die "doins failed"
 	fi
+	insinto /usr/share/gdb/auto-load/usr/$(get_libdir) #443510
+	local libname=$(printf 'e:\n\t@echo $(INSTSONAME)\ninclude Makefile\n' | \
+		emake --no-print-directory -s -f - 2>/dev/null)
+	newins "${S}"/Tools/gdb/libpython.py "${libname}"-gdb.py
 
 	newconfd "${FILESDIR}/pydoc.conf" pydoc-${SLOT} || die "newconfd failed"
 	newinitd "${FILESDIR}/pydoc.init" pydoc-${SLOT} || die "newinitd failed"
@@ -278,6 +282,18 @@ src_install() {
 		-e "s:@PYDOC_PORT_VARIABLE@:PYDOC${SLOT/./_}_PORT:" \
 		-e "s:@PYDOC@:pydoc${SLOT}:" \
 		-i "${ED}etc/conf.d/pydoc-${SLOT}" "${ED}etc/init.d/pydoc-${SLOT}" || die "sed failed"
+
+	# for python-exec
+	python_export python${SLOT} EPYTHON PYTHON PYTHON_SITEDIR
+
+	# if not using a cross-compiler, use the fresh binary
+	if ! tc-is-cross-compiler; then
+		local PYTHON=./python
+		local -x LD_LIBRARY_PATH=${LD_LIBRARY_PATH+${LD_LIBRARY_PATH}:}.
+	fi
+
+	echo "EPYTHON='${EPYTHON}'" > epython.py
+	python_domodule epython.py
 }
 
 pkg_preinst() {
@@ -299,8 +315,6 @@ eselect_python_update() {
 pkg_postinst() {
 	eselect_python_update
 
-	python_mod_optimize -f -x "/(site-packages|test|tests)/" $(python_get_libdir)
-
 	if [[ "${python_updater_warning}" == "1" ]]; then
 		ewarn "You have just upgraded from an older version of Python."
 		ewarn "You should switch active version of Python ${PV%%.*} and run"
@@ -310,6 +324,4 @@ pkg_postinst() {
 
 pkg_postrm() {
 	eselect_python_update
-
-	python_mod_cleanup $(python_get_libdir)
 }
